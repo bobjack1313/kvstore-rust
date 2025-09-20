@@ -23,8 +23,8 @@
 //   - Persistence and indexing are implemented in separate
 //     modules (to be added later).
 // ============================================================
-
-
+mod storage;
+use storage::{append_write, replay_log};
 use std::io::{self, BufRead};
 
 
@@ -40,8 +40,9 @@ fn main() {
     for input_line in stdin.lock().lines() {
         // Unwrap the line and store on stack
         let full_command = input_line.unwrap();
-        // Segment the command parts in a Vec[Str}]
-        let mut command_segments = full_command.trim().splitn(3, ' ');
+        // Segment the command parts in a Vec[Str}] - handles whitespaces
+        let mut command_segments = full_command.splitn(3, char::is_whitespace)
+            .filter(|s| !s.is_empty());
         // Pulling out the command to nornmalize if lowercase is used
         let cmd = command_segments.next().unwrap_or("").to_uppercase();
         // Remaining arguments
@@ -67,14 +68,21 @@ fn main() {
             "SET" => {
                 // Going larger than 2 for now
                 if args.len() >= 2 {
-                    // Perform actions here
-                    let cmd_key = args[0];
-                    let cmd_value = args[1];
+                    // Piece the segments together again
+                    let data_entry = format!("{} {} {}", cmd, args[0], args[1]);
 
-                    // Placeholder acknowledgement
-                    println!("Setting {} for {}", cmd_value, cmd_key);
-                    println!("OK");
+                    // Try to write to file
+                    if let Err(e) = append_write(&data_entry) {
+                        eprintln!("ERROR: failed to write to log file: {}", e);
+
+                    } else {
+                        // Placeholder acknowledgement
+                        println!("Setting {} for {}", args[1], args[0]);
+                        println!("OK");
+                    }
+
                 } else {
+                    // Error for not enough arguments for SET
                     println!("ERROR: SET requires a key and value");
                 }
             }
