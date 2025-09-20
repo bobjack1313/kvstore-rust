@@ -20,9 +20,9 @@
 use std::fs::{OpenOptions, File};
 use std::io::{self, Write, BufRead, BufReader};
 
-
 /// File name from assignment requirements for persistent storage.
 pub const DATA_FILE_NAME: &str = "data.db";
+
 
 /// We need to append a line at the end of the file
 pub fn append_write(input_data: &str) -> io::Result<()> {
