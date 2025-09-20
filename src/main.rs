@@ -31,13 +31,23 @@ use std::io::{self, BufRead};
 /// Entry point for the key-value store assignment.
 fn main() {
     println!("Key Value Store");
-    let proper_syntax = "Syntax Usage: GET <key>, SET <key> <value>, EXIT";
-    println!("{}", proper_syntax);
 
+    // Load data from file
+    load_data();
+
+    // Hand off to the main command loop
+    repl_loop();
+}
+
+
+/// Read, evaluate, and print loop to handle command line instructions.
+fn repl_loop() {
     let stdin = io::stdin();
+    let proper_syntax = "Syntax Usage: GET <key>, SET <key> <value>, EXIT";
 
     // Form a loop to iterate over each input line; lock mutex
     for input_line in stdin.lock().lines() {
+
         // Unwrap the line and store on stack
         let full_command = input_line.unwrap();
         // Segment the command parts in a Vec[Str}] - handles whitespaces
@@ -106,5 +116,18 @@ fn main() {
                 println!("{}", proper_syntax);
             }
         }
+    }
+}
+
+
+/// Loads data from file into active storage
+fn load_data() {
+
+    // Replay log before starting program
+    if let Ok(data_records) = storage::replay_log() {
+        println!("Replayed {} records from {}", data_records.len(), storage::DATA_FILE_NAME);
+
+
+        // TODO: feed records into your index here
     }
 }

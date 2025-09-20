@@ -22,7 +22,7 @@ use std::io::{self, Write, BufRead, BufReader};
 
 
 /// File name from assignment requirements for persistent storage.
-pub const DATA_FILE: &str = "data.db";
+pub const DATA_FILE_NAME: &str = "data.db";
 
 /// We need to append a line at the end of the file
 pub fn append_write(input_data: &str) -> io::Result<()> {
@@ -32,7 +32,7 @@ pub fn append_write(input_data: &str) -> io::Result<()> {
     let mut data_file = OpenOptions::new()
         .create(true)
         .append(true)
-        .open(DATA_FILE)?;
+        .open(DATA_FILE_NAME)?;
 
     // This will write the line and add a newline
     writeln!(data_file, "{}", input_data)?;
@@ -43,8 +43,24 @@ pub fn append_write(input_data: &str) -> io::Result<()> {
     Ok(())
 }
 
-/// We need to read in the file and replay all the entries in memory.
-pub fn replay_log() {
-    println!("replay_log entered.");
 
+/// Replay the log file and return a Vec of commands. Each line is assumed to be "SET key value"
+pub fn replay_log() -> io::Result<Vec<String>> {
+    println!("replay_log entered.");
+    let mut data_records = Vec::new();
+
+    // Verify the file is there and can be opened
+    if let Ok(data_file_retrieved) = File::open(DATA_FILE_NAME) {
+        let buf_reader = BufReader::new(data_file_retrieved);
+
+        // Loop each line in file pushing to heap
+        for line in buf_reader.lines() {
+            // Check for valid entry
+            if let Ok(data_entry) = line {
+                data_records.push(data_entry);
+            }
+        }
+    }
+    // Complete - Remember returned values in Rust have no semicolon
+    Ok(data_records)
 }
