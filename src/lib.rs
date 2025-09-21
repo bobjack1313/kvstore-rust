@@ -43,8 +43,8 @@ pub enum CommandResult {
 pub fn load_data() {
 
     // Replay log before starting program
-    if let Ok(data_records) = storage::replay_log() {
-        println!("Replayed {} records from {}", data_records.len(), storage::DATA_FILE_NAME);
+    if let Ok(data_records) = storage::replay_log(storage::DATA_FILE) {
+        println!("Replayed {} records from {}", data_records.len(), storage::DATA_FILE);
 
 
         // TODO: feed records into your index here
@@ -130,7 +130,7 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str) -> CommandRes
                 let data_entry = format!("{} {} {}", cmd, args[0], args[1]);
 
                 // Try to write to file
-                if let Err(e) = append_write(&data_entry) {
+                if let Err(e) = append_write(storage::DATA_FILE, &data_entry) {
                     eprintln!("ERROR: failed to write to log file: {}", e);
                } else {
                     // Placeholder acknowledgement
@@ -175,7 +175,7 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str) -> CommandRes
 // =================================================================
 
 #[cfg(test)]
-mod main_tests {
+mod main_lib_tests {
     use super::*;
     use std::fs;
 
