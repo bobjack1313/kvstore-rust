@@ -26,6 +26,7 @@
 //     `EXIT`                -> Terminate the program
 // =====================================================================
 mod storage;
+pub mod index;
 use storage::{append_write, replay_log};
 use std::io::{self, BufRead};
 
