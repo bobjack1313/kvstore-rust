@@ -29,6 +29,8 @@ mod storage;
 pub mod index;
 use storage::{append_write, replay_log};
 use std::io::{self, BufRead};
+pub use index::BTreeNode;
+pub use index::BTreeIndex;
 
 /// Result of handling a single user command.
 ///
