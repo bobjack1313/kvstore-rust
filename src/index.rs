@@ -76,7 +76,21 @@ impl BTreeIndex {
         }
     }
 
-    /// Standard B-tree search: returns value if present.
+    /// Search for a key in the B-tree.
+    ///
+    /// Traverses the tree from the root, descending into child nodes as needed,
+    /// to locate the target key.
+    ///
+    /// # Arguments
+    /// * `key` - The key to search for.
+    ///
+    /// # Returns
+    /// * `Some(&str)` containing a reference to the associated value if the key exists.
+    /// * `None` if the key is not found in the tree.
+    ///
+    /// # Notes
+    /// - Keys are compared in sorted order using `lower_bound`.
+    /// - Search runs in **O(log n)** time due to B-tree height guarantees.
     pub fn search(&self, key: &str) -> Option<&str> {
 
         // Recursive function declaration for node search
@@ -102,8 +116,155 @@ impl BTreeIndex {
         search_node(&self.root, key)
     }
 
+    /// Insert a key-value pair into the B-tree.
+    ///
+    /// - If the key already exists anywhere in the tree, its value is updated
+    ///   (last write wins).
+    /// - If the key does not exist, it is inserted at the correct position to
+    ///   hold sorted order and balance the B-tree.
+    /// - If the root node is full, the tree grows in height by splitting the root.
+    ///
+    /// # Arguments
+    /// * `key`   - The key to insert.
+    /// * `value` - The value to associate with the key.
+    ///
+    /// # Notes
+    /// This is the primary public interface for modifying the B-tree.
+    /// Internally, it calls [`insert_inside`] and may trigger [`split_child`].
+    pub fn insert(&mut self, key: String, value: String) {
+        let t = self.t;
+
+        if self.root.kv_pairs.len() == 2 * t - 1 {
+            // Create a new root and hang the old root under it
+            let mut new_root = Box::new(BTreeNode::new(false));
+            new_root.children.push(std::mem::replace(
+                &mut self.root,
+                Box::new(BTreeNode::new(true)),
+            ));
+
+            // Split old root (now child 0 of new_root)
+            Self::split_child(&mut new_root, t, 0);
+
+            // Choose which child to descend into
+            let i = if key > new_root.kv_pairs[0].0 { 1 } else { 0 };
+            Self::insert_inside(&mut new_root.children[i], t, key, value);
+
+            // Replace the tree's root
+            self.root = new_root;
+        } else {
+            // Root not full — normal descent
+            Self::insert_inside(&mut self.root, t, key, value);
+        }
+    }
 
 
+    // =========================
+    // Insertion helpers
+    // =========================
+
+    /// Inserts a key-value pair into the subtree rooted at `node`.
+    ///
+    /// This function handles both the base case (insertion into a leaf node)
+    /// and the recursive case (descent into an internal node). If the key
+    /// already exists at the current level, its value is updated to satisfy
+    /// the "last write wins" requirement.
+    ///
+    /// # Arguments
+    /// * `node`  - Mutable reference to the current subtree root.
+    /// * `key`   - The key to insert (String).
+    /// * `value` - The value to associate with the key (String).
+    ///
+    /// # Behavior
+    /// - **Leaf node**:
+    ///   - If the key exists, overwrite its value.
+    ///   - Otherwise, insert `(key, value)` at the correct sorted position.
+    /// - **Internal node**:
+    ///   - If the key exists, overwrite its value.
+    ///   - Otherwise, split a full child before descending to ensure space,
+    ///     then recurse into the correct child.
+    ///
+    /// # Notes
+    /// - Uses `lower_bound` to maintain sorted order of keys.
+    /// - Checks that no child is full before recursion.
+    /// - Does not return a value; modifies the tree in place.
+    ///
+    /// # Call outs
+    /// Will call out if there is a violation like attempting to split a
+    /// non-full child. Should not happend if properly working.
+    fn insert_inside(node: &mut BTreeNode, t: usize, key: String, value: String) {
+        let mut i = node.lower_bound(&key);
+
+        // Base case - leaf insert
+        if node.is_leaf {
+            // Overwrite if key exists (last write wins)
+            if i < node.kv_pairs.len() && node.kv_pairs[i].0 == key {
+                node.kv_pairs[i].1 = value;
+            } else {
+                node.kv_pairs.insert(i, (key, value));
+            }
+            return;
+        }
+        // If key exists in internal node - overwrite value and stop
+        if i < node.kv_pairs.len() && node.kv_pairs[i].0 == key {
+            node.kv_pairs[i].1 = value;
+            return;
+        }
+        // Recurse case - inside node
+        // Check i child is not full
+        if node.children[i].kv_pairs.len() == 2 * t - 1 {
+            Self::split_child(node, t, i);
+
+            // After split decide which child to descend into
+            if key > node.kv_pairs[i].0 {
+                i += 1;
+            } else if key == node.kv_pairs[i].0 {
+                node.kv_pairs[i].1 = value;
+                return;
+            }
+        }
+        // Recurse into the appropriate child
+        Self::insert_inside(&mut node.children[i], t, key, value);
+    }
+
+
+    /// Split a full child node during insertion.
+    ///
+    /// When a child at `node.children[i]` contains the maximum number of keys
+    /// (`2t - 1`), this function splits it into two nodes and bumps the middle
+    /// key into the parent. Check that there is no node overflows and maintains
+    /// B-tree balance.
+    ///
+    /// # Arguments
+    /// * `node` - The parent node containing the full child.
+    /// * `i`    - The index of the full child to split.
+    ///
+    /// # Behavior
+    /// - The left child keeps the first `t - 1` keys.
+    /// - The right child receives the last `t - 1` keys.
+    /// - The median key is moved up into the parent at position `i`.
+    /// - If the full child is an internal node, its children are split as well.
+    ///
+    /// # Call outs
+    /// Will call out when called on a child that is not actually full.
+    fn split_child(node: &mut BTreeNode, t: usize, i: usize) {
+        // We are here because child node is full
+        let full_child = &mut node.children[i];
+        let mut right = Box::new(BTreeNode::new(full_child.is_leaf));
+
+        // Right node gets t-1 largest kv_pairs
+        // keep [0..t) in child ------ [t..] to right
+        right.kv_pairs = full_child.kv_pairs.split_off(t);
+        // Grab  the middle node
+        let middle = full_child.kv_pairs.pop().expect("full child must have middle");
+
+        // If internal, split children too: left keeps [0..t), right takes [t..]
+        if !full_child.is_leaf {
+            right.children = full_child.children.split_off(t);
+        }
+        // Insert middle into parent and link new right child
+        node.kv_pairs.insert(i, middle);
+        node.children.insert(i + 1, right);
+    }
 }
 
 
@@ -186,4 +347,17 @@ mod index_tests {
         // Key not present
         assert_eq!(tree.search("x"), None);
     }
+
+    #[test]
+    fn insert_and_search_basic() {
+        let mut t = BTreeIndex::new(2);
+        t.insert("dog".into(), "bark".into());
+        t.insert("cat".into(), "meow".into());
+        t.insert("fish".into(), "splash".into());
+        assert_eq!(t.search("dog"), Some("bark"));
+        assert_eq!(t.search("cat"), Some("meow"));
+        assert_eq!(t.search("bird"), None);
+    }
+
+
 }
