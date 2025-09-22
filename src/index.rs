@@ -408,4 +408,51 @@ mod index_tests {
         assert_eq!(t.search("e"), Some("5"));
         assert_eq!(t.search("f"), Some("6"));
     }
+
+    #[test]
+    fn search_misses_in_leaf() {
+        let mut tree = BTreeIndex::new(2);
+        tree.insert("fish".into(), "splash".into());
+
+        assert_eq!(tree.search("bird"), None);
+    }
+
+    #[test]
+    fn search_descends_into_child() {
+        let mut tree = BTreeIndex::new(2);
+        // Insert enough keys to cause a split
+        for (k, v) in [("a","A"),("b","B"),("c","C"),("d","D"),("e","E")] {
+            tree.insert(k.into(), v.into());
+        }
+
+        // Keys before split
+        assert_eq!(tree.search("a"), Some("A"));
+        assert_eq!(tree.search("c"), Some("C"));
+        // Keys after split (forces recursion)
+        assert_eq!(tree.search("e"), Some("E"));
+    }
+
+    #[test]
+    fn search_after_overwrite() {
+        let mut tree = BTreeIndex::new(2);
+        tree.insert("x".into(), "old".into());
+        tree.insert("x".into(), "new".into());
+
+        assert_eq!(tree.search("x"), Some("new"));
+    }
+
+    #[test]
+    fn search_many_keys() {
+        let mut tree = BTreeIndex::new(2);
+        for i in 0..50 {
+            tree.insert(format!("k{:02}", i), format!("v{:02}", i));
+        }
+
+        // Spot-check a few
+        assert_eq!(tree.search("k00"), Some("v00"));
+        assert_eq!(tree.search("k25"), Some("v25"));
+        assert_eq!(tree.search("k49"), Some("v49"));
+        // Null case
+        assert_eq!(tree.search("k99"), None);
+    }
 }
