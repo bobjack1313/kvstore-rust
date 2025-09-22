@@ -349,6 +349,7 @@ mod index_tests {
     }
 
     #[test]
+    // Simple test for inserting
     fn insert_and_search_basic() {
         let mut t = BTreeIndex::new(2);
         t.insert("dog".into(), "bark".into());
@@ -359,5 +360,52 @@ mod index_tests {
         assert_eq!(t.search("bird"), None);
     }
 
+   #[test]
+    fn insert_overwrites_value() {
+        let mut t = BTreeIndex::new(2);
+        t.insert("dod".into(), "bark".into());
+        t.insert("dog".into(), "woofwoof".into());
+        assert_eq!(t.search("dog"), Some("woofwoof"));
+    }
 
+    #[test]
+    fn insert_causes_root_split() {
+        let mut t = BTreeIndex::new(2);
+        t.insert("a".into(), "1".into());
+        t.insert("b".into(), "2".into());
+        t.insert("c".into(), "3".into());
+        // This one creates split
+        t.insert("d".into(), "4".into());
+
+        assert_eq!(t.search("a"), Some("1"));
+        assert_eq!(t.search("d"), Some("4"));
+    }
+
+    #[test]
+    fn search_nonexistent_key() {
+        let mut t = BTreeIndex::new(2);
+        t.insert("cat".into(), "meow".into());
+        assert_eq!(t.search("dog"), None);
+    }
+
+    #[test]
+    fn consistent_key_sorting() {
+        let mut t = BTreeIndex::new(2);
+        t.insert("dog".into(), "bark".into());
+        t.insert("cat".into(), "meow".into());
+        t.insert("apple".into(), "fruit".into());
+
+        let root = &t.root;
+        assert!(root.kv_pairs.windows(2).all(|w| w[0].0 < w[1].0));
+    }
+
+    #[test]
+    fn multiple_splits() {
+        let mut t = BTreeIndex::new(2);
+        for (k, v) in [("a","1"),("b","2"),("c","3"),("d","4"),("e","5"),("f","6")] {
+            t.insert(k.into(), v.into());
+        }
+        assert_eq!(t.search("e"), Some("5"));
+        assert_eq!(t.search("f"), Some("6"));
+    }
 }
