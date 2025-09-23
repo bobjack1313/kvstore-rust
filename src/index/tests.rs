@@ -20,8 +20,9 @@
 // =================================================================
 #[cfg(test)]
 mod index_tests {
-use crate::BTreeNode;
-use crate::BTreeIndex;
+    use crate::BTreeNode;
+    use crate::BTreeIndex;
+
     #[test]
     fn test_new_leaf_node() {
         let node = BTreeNode::new(true);
@@ -102,8 +103,9 @@ use crate::BTreeIndex;
 // =================================================================
 #[cfg(test)]
 mod index_insertion_tests {
-use crate::BTreeNode;
-use crate::BTreeIndex;
+    use crate::BTreeNode;
+    use crate::BTreeIndex;
+
     #[test]
     // Simple test for inserting
     fn insert_and_search_basic() {
@@ -161,8 +163,9 @@ use crate::BTreeIndex;
 // =================================================================
 #[cfg(test)]
 mod index_expanded_search_tests {
-use crate::BTreeNode;
-use crate::BTreeIndex;
+    use crate::BTreeNode;
+    use crate::BTreeIndex;
+
     #[test]
     fn multiple_splits() {
         let mut t = BTreeIndex::new(2);
@@ -218,6 +221,98 @@ use crate::BTreeIndex;
         assert_eq!(tree.search("k49"), Some("v49"));
         // Null case
         assert_eq!(tree.search("k99"), None);
+    }
+}
+
+
+// =================================================================
+// Unit tests for deleting from tree
+// =================================================================
+#[cfg(test)]
+mod index_delete_tests {
+    use crate::BTreeNode;
+    use crate::BTreeIndex;
+
+    /// Helper to make a tree with degree 2 and some inserts
+    fn sample_tree() -> BTreeIndex {
+        let mut t = BTreeIndex::new(2);
+        t.insert("dog".into(), "bark".into());
+        t.insert("cat".into(), "meow".into());
+        t.insert("dinosaur".into(), "raaawr".into());
+        t.insert("bird".into(), "chirp".into());
+        t.insert("frog".into(), "ribbet".into());
+        t.insert("elephant".into(), "honkhonk".into());
+        t.insert("fox".into(), "fraka-kaka-kaka-kaka-kow!".into());
+        t
+    }
+
+    #[test]
+    fn delete_leaf_key() {
+        let mut t = sample_tree();
+        assert_eq!(t.search("frog"), Some("ribbet"));
+        t.delete("frog");
+        assert_eq!(t.search("frog"), None);
+    }
+
+    #[test]
+    fn delete_non_existent_key() {
+        let mut t = sample_tree();
+        t.delete("unicorn");
+        // Nothing should change
+        assert_eq!(t.search("dog"), Some("bark"));
+        assert_eq!(t.search("cat"), Some("meow"));
+    }
+
+    #[test]
+    fn delete_internal_key_with_predecessor() {
+        let mut t = sample_tree();
+        assert_eq!(t.search("cat"), Some("meow"));
+        // "cat" will be replaced with predecessor
+        t.delete("cat");
+        assert_eq!(t.search("cat"), None);
+        // Other entries still intact
+        assert_eq!(t.search("dog"), Some("bark"));
+    }
+
+    #[test]
+    fn delete_internal_key_with_successor() {
+        let mut t = sample_tree();
+        assert_eq!(t.search("dinosaur"), Some("raaawr"));
+        // "dinosaur" replaced with successor
+        t.delete("dinosaur");
+        assert_eq!(t.search("dinosaur"), None);
+        // Tree still contains other values
+        assert_eq!(t.search("dog"), Some("bark"));
+        assert_eq!(t.search("fox"), Some("fraka-kaka-kaka-kaka-kow!"));
+    }
+
+    #[test]
+    fn delete_until_empty() {
+        let mut t = sample_tree();
+        let keys = vec![
+            "bird", "cat", "dinosaur", "dog", "elephant", "fox", "frog",
+        ];
+        for k in &keys {
+            assert!(t.search(k).is_some(), "missing before delete: {}", k);
+            t.delete(k);
+            assert_eq!(t.search(k), None, "still present after delete: {}", k);
+        }
+        // Root should now be empty leaf
+        assert!(t.root.is_leaf);
+        assert!(t.root.kv_pairs.is_empty());
+    }
+
+    #[test]
+    fn delete_causes_merge_case() {
+        let mut t = BTreeIndex::new(2);
+        // Insert a sequence designed to trigger merging on deletion
+        for k in &["a", "b", "c", "d", "e", "f", "g"] {
+            t.insert(k.to_string(), format!("val{}", k));
+        }
+        t.delete("c"); // should trigger internal restructuring
+        assert_eq!(t.search("c"), None);
+        assert_eq!(t.search("a"), Some("vala"));
+        assert_eq!(t.search("g"), Some("valg"));
     }
 }
 

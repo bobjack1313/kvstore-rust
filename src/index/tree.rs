@@ -451,9 +451,9 @@ impl BTreeIndex {
     /// kv_pairs so that the underflowing child regains at least `t` keys.
     fn borrow_from_next(node: &mut BTreeNode, idx: usize) {
         // Child idx borrows one kv_pair from child idx+1 via parent
-        let (left_slice, right_slice) = node.children.split_at_mut(idx);
-        let right = &mut right_slice[idx + 1];
-        let child = &mut left_slice[0];
+        let (left_slice, right_slice) = node.children.split_at_mut(idx + 1);
+        let right = &mut right_slice[0];
+        let child = &mut left_slice[idx];
 
         // Move parent kv_pair down to child (as last)
         let parent_kvs = node.kv_pairs[idx].clone();
