@@ -43,20 +43,32 @@ pub enum CommandResult {
 
 
 /// Loads data from file into active storage
-pub fn load_data() {
+pub fn load_data(index: &mut BTreeIndex) {
 
     // Replay log before starting program
     if let Ok(data_records) = storage::replay_log(storage::DATA_FILE) {
         println!("Replayed {} records from {}", data_records.len(), storage::DATA_FILE);
 
+        for record in data_records {
 
-        // TODO: feed records into your index here
+            // Split "SET key value"
+            let mut segments = record.splitn(3, char::is_whitespace);
+            let cmd = segments.next().unwrap_or("");
+
+            if cmd == "SET" {
+                if let (Some(key), Some(value)) = (segments.next(), segments.next()) {
+                    // Values exist, insert into tree
+                    index.insert(key.to_string(), value.to_string());
+                }
+            }
+        }
+        //println!("{:#?}", index);
     }
 }
 
 
 /// Read, evaluate, and print loop to handle command line instructions.
-pub fn repl_loop() {
+pub fn repl_loop(index: &mut BTreeIndex) {
     let stdin = io::stdin();
     let proper_syntax = "Syntax Usage: GET <key>, SET <key> <value>, EXIT";
 
@@ -67,7 +79,7 @@ pub fn repl_loop() {
         let (cmd, args) = parse_command(&full_command);
 
         // Process command and arguments
-        match handle_command(&cmd, &args, proper_syntax) {
+        match handle_command(&cmd, &args, proper_syntax, index) {
             CommandResult::Exit => break,
             CommandResult::Continue => (),
         }
@@ -107,18 +119,19 @@ fn parse_command(line: &str) -> (String, Vec<String>) {
 /// - `CommandResult::Exit` if the user requested termination.
 ///
 /// The `proper_syntax` argument is displayed in error messages to guide the user.
-fn handle_command(cmd: &str, args: &[String], proper_syntax: &str) -> CommandResult {
+fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, index: &mut BTreeIndex) -> CommandResult {
     // Watch - cmd is ref here
     match cmd.as_ref() {
 
         // Get command format:  GET <key>
         "GET" => {
-            // Perform actions here
 
-            if let Some(cmd_key) = args.get(0) {
-                // Placeholder acknowledgement
-                println!("Getting {}", cmd_key);
-                println!("NULL");
+            if let Some(key) = args.get(0) {
+                match index.search(key) {
+                    Some(value) => println!("{}", value),
+                    None => println!("NULL"),
+                }
+
             } else {
                 println!("ERROR: GET requires a key");
             }
@@ -135,10 +148,11 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str) -> CommandRes
                 // Try to write to file
                 if let Err(e) = append_write(storage::DATA_FILE, &data_entry) {
                     eprintln!("ERROR: failed to write to log file: {}", e);
+
                } else {
-                    // Placeholder acknowledgement
-                    println!("Setting {} for {}", args[1], args[0]);
-                    println!("OK");
+                    // Success log write - now store in mem
+                    index.insert(args[0].clone(), args[1].clone());
+                    println!("Setting key: {} - value: {}", args[0], args[1]);
                 }
 
             } else {

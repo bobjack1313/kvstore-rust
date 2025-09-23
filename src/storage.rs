@@ -24,9 +24,20 @@ use std::io::{self, Write, BufRead, BufReader};
 pub const DATA_FILE: &str = "data.db";
 
 
-/// We need to append a line at the end of the file
+/// Append a single command to the persistent log file.
+///
+/// Each command is written on its own line with a trailing newline.
+/// The file is created if it does not exist, and opened in append mode.
+/// Data is flushed immediately to disk to reduce the chance of loss.
+///
+/// # Arguments
+/// * `filename` - The path of the log file (e.g. `data.db`).
+/// * `input_data` - The raw command string (e.g. `"SET dog bark"`).
+///
+/// # Returns
+/// * `Ok(())` if the line was successfully written and flushed.
+/// * `Err(io::Error)` if the file could not be opened or written to.
 pub fn append_write(filename: &str, input_data: &str) -> io::Result<()> {
-    println!("append_write entered with: {}", input_data);
 
     // Access the data file, create if needed
     let mut data_file = OpenOptions::new()
@@ -37,13 +48,24 @@ pub fn append_write(filename: &str, input_data: &str) -> io::Result<()> {
     // This will write the line and add a newline
     writeln!(data_file, "{}", input_data)?;
     // Flushing will write data - reduces data loss
-    //data_file.flush()?;
     data_file.sync_all()?;
 
     Ok(())
 }
 
 
+/// Replay the contents of a persistent log file into memory.
+///
+/// Reads the file line by line, collecting each command string
+/// into a vector. This function is typically called on startup
+/// to rebuild the in-memory index from durable state.
+///
+/// # Arguments
+/// * `filename` - The path of the log file (e.g. `data.db`).
+///
+/// # Returns
+/// * `Ok(Vec<String>)` containing all non-empty lines, in order.
+/// * `Err(io::Error)` if the file could not be opened or read.
 pub fn replay_log(filename: &str) -> io::Result<Vec<String>> {
     let mut data_records = Vec::new();
 

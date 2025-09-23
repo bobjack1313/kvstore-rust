@@ -26,6 +26,7 @@
 // https://build-your-own.org/database/
 // https://www.geeksforgeeks.org/dsa/introduction-of-b-tree-2/
 /// Basic Foundational BTree Node
+#[derive(Debug)]
 pub struct BTreeNode {
     /// Key–value pairs stored in this node.
     /// Keys are kept sorted so we can binary search efficiently.

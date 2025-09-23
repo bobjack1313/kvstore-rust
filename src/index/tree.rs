@@ -28,6 +28,7 @@ use super::BTreeNode;
 
 /// BTree Index, interfaces with lib to index the db with the nodes and leafs.
 /// Contains the branching factor (t) and root node.
+#[derive(Debug)]
 pub struct BTreeIndex {
     pub t: usize,
     pub root: Box<BTreeNode>,
