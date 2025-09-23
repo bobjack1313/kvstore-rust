@@ -21,5 +21,6 @@ target
 #.idea/
 =======
 /target
-data.db
-test_data.db
+
+# Data base files created by the program
+*.db

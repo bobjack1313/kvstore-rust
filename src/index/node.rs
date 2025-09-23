@@ -3,7 +3,7 @@
 // Author: Bob Jack
 // Course: CSCE 5350: Fundamentals of Database Systems
 // Midterm/Final Project Part 1
-// Date: Sept 21, 2025
+// Date: Sept 21, 2025 - Refactored Sept 22, 2025
 //
 // Description:
 //   Defines the core B-tree node structure (`BTreeNode`) used by the

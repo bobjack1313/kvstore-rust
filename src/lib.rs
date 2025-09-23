@@ -26,7 +26,7 @@
 //     `EXIT`                -> Terminate the program
 // =====================================================================
 mod storage;
-use storage::{append_write, replay_log};
+pub use storage::{append_write, replay_log, DATA_FILE};
 pub mod index;
 pub use index::{BTreeNode, BTreeIndex};
 use std::io::{self, BufRead};
@@ -193,6 +193,7 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, index: &mut B
 
 #[cfg(test)]
 mod main_lib_tests {
+    use crate::BTreeIndex;
     use super::*;
 
     #[test]
@@ -205,7 +206,8 @@ mod main_lib_tests {
     #[test]
     fn test_exit_command() {
         let (cmd, args) = parse_command("EXIT");
-        let result = handle_command(&cmd, &args, "Usage");
+        let mut tree = BTreeIndex::new(2);
+        let result = handle_command(&cmd, &args, "Usage", &mut tree);
         assert!(matches!(result, CommandResult::Exit));
     }
 
@@ -232,7 +234,8 @@ mod main_lib_tests {
         assert_eq!(cmd, "FLY");
         assert_eq!(args[0], "away");
 
-        let result = handle_command(&cmd, &args, "Usage");
+        let mut tree = BTreeIndex::new(2);
+        let result = handle_command(&cmd, &args, "Usage", &mut tree);
         // Should not exit on bad command
         assert!(matches!(result, CommandResult::Continue));
     }
@@ -242,8 +245,8 @@ mod main_lib_tests {
         let (cmd, args) = parse_command("GET");
         assert_eq!(cmd, "GET");
         assert!(args.is_empty());
-
-        let result = handle_command(&cmd, &args, "Usage");
+        let mut tree = BTreeIndex::new(2);
+        let result = handle_command(&cmd, &args, "Usage", &mut tree);
         assert!(matches!(result, CommandResult::Continue));
     }
 
@@ -252,8 +255,8 @@ mod main_lib_tests {
         let (cmd, args) = parse_command("SET justonekey");
         assert_eq!(cmd, "SET");
         assert_eq!(args.len(), 1);
-
-        let result = handle_command(&cmd, &args, "Usage");
+        let mut tree = BTreeIndex::new(2);
+        let result = handle_command(&cmd, &args, "Usage", &mut tree);
         assert!(matches!(result, CommandResult::Continue));
     }
 
