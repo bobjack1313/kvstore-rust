@@ -26,11 +26,11 @@
 //     `EXIT`                -> Terminate the program
 // =====================================================================
 mod storage;
-pub mod index;
 use storage::{append_write, replay_log};
+pub mod index;
+pub use index::{BTreeNode, BTreeIndex};
 use std::io::{self, BufRead};
-pub use index::BTreeNode;
-pub use index::BTreeIndex;
+
 
 /// Result of handling a single user command.
 ///
@@ -180,7 +180,6 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str) -> CommandRes
 #[cfg(test)]
 mod main_lib_tests {
     use super::*;
-    use std::fs;
 
     #[test]
     fn test_parse_exit_command() {

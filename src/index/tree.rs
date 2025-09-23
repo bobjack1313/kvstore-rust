@@ -1,63 +1,30 @@
 // =====================================================================
-// File: index.rs
+// File: index/tree.rs
 // Author: Bob Jack
 // Course: CSCE 5350: Fundamentals of Database Systems
 // Midterm/Final Project Part 1
-// Date: Sept 21, 2025
+// Date: Sept 21, 2025 - Refactored Sept. 23, 2025
 //
+// Description:
+//   Implements the B-tree index (`BTreeIndex`) that manages insertion,
+//   search, and deletion operations over `BTreeNode` structures. This
+//   index serves as the in-memory data structure backing the key-value
+//   store, ensuring efficient lookups and ordered key management.
+//
+// Features:
+//   - `insert`: Adds or overwrites key–value pairs (last write wins).
+//   - `search`: Standard B-tree search; returns the value for a key.
+//   - `delete`: Removes keys while preserving B-tree invariants.
+//   - Split/merge helpers: Maintain balance during inserts and deletes.
+//
+// Notes:
+//   * Relies on `node.rs` for the `BTreeNode` definition.
+//   * The minimum degree `t` determines the branching factor and the
+//     number of keys per node.
+//   * Internal helpers (`insert_internal`, `delete_internal`, etc.)
+//     implement the recursive B-tree algorithms.
 // =====================================================================
-
-
-// BTree Referencing:
-// https://build-your-own.org/database/
-// https://www.geeksforgeeks.org/dsa/introduction-of-b-tree-2/
-/// Basic Foundational BTree Node
-pub struct BTreeNode {
-    /// Key–value pairs stored in this node.
-    /// Keys are kept sorted so we can binary search efficiently.
-    pub kv_pairs: Vec<(String, String)>,
-    /// Box allows Rust to recursivley move through values and nodes - Heap
-    pub children: Vec<Box<BTreeNode>>,
-    pub is_leaf: bool,
-}
-
-
-impl BTreeNode {
-    // Creates a new empty B-tree node.
-    ///
-    /// # Arguments
-    ///
-    /// * `is_leaf` - A boolean flag indicating whether this node
-    ///   is a leaf (has no children) or an internal node (may have children).
-    ///
-    /// # Returns
-    ///
-    /// A `BTreeNode` instance with empty keys-values, and children vectors.
-    ///
-    /// # Example
-    /// ```
-    /// use kvstore::index::BTreeNode;
-    /// let leaf = BTreeNode::new(true);
-    /// assert!(leaf.kv_pairs.is_empty());
-    /// assert!(leaf.is_leaf);
-    /// ```
-    pub fn new(is_leaf: bool) -> Self {
-        Self {
-            kv_pairs: Vec::new(),
-            children: Vec::new(),
-            is_leaf,
-        }
-    }
-
-    /// Binary search helper: returns the index of the key if found,
-    /// or the position where it should be inserted otherwise.
-    pub fn lower_bound(&self, key: &str) -> usize {
-        self.kv_pairs
-            .binary_search_by(|(k, _)| k.as_str().cmp(key))
-            .unwrap_or_else(|pos| pos)
-    }
-}
-
+use super::BTreeNode;
 
 /// BTree Index, interfaces with lib to index the db with the nodes and leafs.
 /// Contains the branching factor (t) and root node.
@@ -67,6 +34,9 @@ pub struct BTreeIndex {
 }
 
 
+// BTree Referencing:
+// https://build-your-own.org/database/
+// https://www.geeksforgeeks.org/dsa/introduction-of-b-tree-2/
 impl BTreeIndex {
     /// Create a new empty B-tree with minimum degree t greather than 2.
     pub fn new(t: usize) -> Self {
@@ -340,7 +310,7 @@ impl BTreeIndex {
     ///   maintaining balance and invariants.
     /// * Used internally by `delete` to perform the actual recursive traversal.
     fn delete_internal(node: &mut BTreeNode, t: usize, key: &str) {
-        let mut idx = node.lower_bound(key);
+        let idx = node.lower_bound(key);
 
         // First case - key is in this node
         if idx < node.kv_pairs.len() && node.kv_pairs[idx].0 == key {
@@ -540,195 +510,5 @@ impl BTreeIndex {
             current_node = &mut current_node.children[last];
         }
         current_node.kv_pairs.last().expect("non-empty").clone()
-    }
-}
-
-
-// =================================================================
-// index.rs Unit tests
-// =================================================================
-#[cfg(test)]
-mod index_tests {
-    use super::*;
-
-    #[test]
-    fn test_new_leaf_node() {
-        let node = BTreeNode::new(true);
-        assert!(node.kv_pairs.is_empty());
-        assert!(node.children.is_empty());
-        assert!(node.is_leaf);
-    }
-
-    #[test]
-    fn test_new_internal_node() {
-        let node = BTreeNode::new(false);
-        assert!(!node.is_leaf);
-    }
-
-    #[test]
-    fn test_new_internal_index() {
-        let index = BTreeIndex::new(2);
-        assert!(index.t >= 2);
-        assert!(index.root.kv_pairs.is_empty());
-        assert!(index.root.children.is_empty());
-        assert!(index.root.is_leaf);
-    }
-
-    #[test]
-    // Initial search testing without using inserts
-    fn search_in_single_leaf_node() {
-        // Create a leaf with two kv_pairs
-        let mut root = BTreeNode::new(true);
-        root.kv_pairs.push(("cat".into(), "meow".into()));
-        root.kv_pairs.push(("dog".into(), "bark".into()));
-        // println!("{:?}", root.kv_pairs);
-        let tree = BTreeIndex { t: 2, root: Box::new(root) };
-
-        // Should find exact matches
-        assert_eq!(tree.search("dog"), Some("bark"));
-        assert_eq!(tree.search("cat"), Some("meow"));
-
-        // This will miss - key not in tree
-        assert_eq!(tree.search("fish"), None);
-    }
-
-    #[test]
-    // Tests how search performs recursively - not using insert to build
-    fn search_in_internal_node() {
-        // Root is internal (is_leaf = false)
-        let mut root = BTreeNode::new(false);
-        // Make a split
-        root.kv_pairs.push(("m".into(), "middle".into()));
-
-        // Left child: [a -> "A", f -> "F"]
-        let mut left = BTreeNode::new(true);
-        left.kv_pairs.push(("a".into(), "A".into()));
-        left.kv_pairs.push(("f".into(), "F".into()));
-
-        // Right child: [z -> "Z"]
-        let mut right = BTreeNode::new(true);
-        right.kv_pairs.push(("z".into(), "Z".into()));
-
-        // Attach children
-        root.children.push(Box::new(left));
-        root.children.push(Box::new(right));
-
-        let tree = BTreeIndex { t: 2, root: Box::new(root) };
-
-        // These require descending into children
-        assert_eq!(tree.search("a"), Some("A"));
-        assert_eq!(tree.search("f"), Some("F"));
-        assert_eq!(tree.search("z"), Some("Z"));
-
-        // Key not present
-        assert_eq!(tree.search("x"), None);
-    }
-
-    #[test]
-    // Simple test for inserting
-    fn insert_and_search_basic() {
-        let mut t = BTreeIndex::new(2);
-        t.insert("dog".into(), "bark".into());
-        t.insert("cat".into(), "meow".into());
-        t.insert("fish".into(), "splash".into());
-        assert_eq!(t.search("dog"), Some("bark"));
-        assert_eq!(t.search("cat"), Some("meow"));
-        assert_eq!(t.search("bird"), None);
-    }
-
-   #[test]
-    fn insert_overwrites_value() {
-        let mut t = BTreeIndex::new(2);
-        t.insert("dod".into(), "bark".into());
-        t.insert("dog".into(), "woofwoof".into());
-        assert_eq!(t.search("dog"), Some("woofwoof"));
-    }
-
-    #[test]
-    fn insert_causes_root_split() {
-        let mut t = BTreeIndex::new(2);
-        t.insert("a".into(), "1".into());
-        t.insert("b".into(), "2".into());
-        t.insert("c".into(), "3".into());
-        // This one creates split
-        t.insert("d".into(), "4".into());
-
-        assert_eq!(t.search("a"), Some("1"));
-        assert_eq!(t.search("d"), Some("4"));
-    }
-
-    #[test]
-    fn search_nonexistent_key() {
-        let mut t = BTreeIndex::new(2);
-        t.insert("cat".into(), "meow".into());
-        assert_eq!(t.search("dog"), None);
-    }
-
-    #[test]
-    fn consistent_key_sorting() {
-        let mut t = BTreeIndex::new(2);
-        t.insert("dog".into(), "bark".into());
-        t.insert("cat".into(), "meow".into());
-        t.insert("apple".into(), "fruit".into());
-
-        let root = &t.root;
-        assert!(root.kv_pairs.windows(2).all(|w| w[0].0 < w[1].0));
-    }
-
-    #[test]
-    fn multiple_splits() {
-        let mut t = BTreeIndex::new(2);
-        for (k, v) in [("a","1"),("b","2"),("c","3"),("d","4"),("e","5"),("f","6")] {
-            t.insert(k.into(), v.into());
-        }
-        assert_eq!(t.search("e"), Some("5"));
-        assert_eq!(t.search("f"), Some("6"));
-    }
-
-    #[test]
-    fn search_misses_in_leaf() {
-        let mut tree = BTreeIndex::new(2);
-        tree.insert("fish".into(), "splash".into());
-
-        assert_eq!(tree.search("bird"), None);
-    }
-
-    #[test]
-    fn search_descends_into_child() {
-        let mut tree = BTreeIndex::new(2);
-        // Insert enough keys to cause a split
-        for (k, v) in [("a","A"),("b","B"),("c","C"),("d","D"),("e","E")] {
-            tree.insert(k.into(), v.into());
-        }
-
-        // Keys before split
-        assert_eq!(tree.search("a"), Some("A"));
-        assert_eq!(tree.search("c"), Some("C"));
-        // Keys after split (forces recursion)
-        assert_eq!(tree.search("e"), Some("E"));
-    }
-
-    #[test]
-    fn search_after_overwrite() {
-        let mut tree = BTreeIndex::new(2);
-        tree.insert("x".into(), "old".into());
-        tree.insert("x".into(), "new".into());
-
-        assert_eq!(tree.search("x"), Some("new"));
-    }
-
-    #[test]
-    fn search_many_keys() {
-        let mut tree = BTreeIndex::new(2);
-        for i in 0..50 {
-            tree.insert(format!("k{:02}", i), format!("v{:02}", i));
-        }
-
-        // Spot-check a few
-        assert_eq!(tree.search("k00"), Some("v00"));
-        assert_eq!(tree.search("k25"), Some("v25"));
-        assert_eq!(tree.search("k49"), Some("v49"));
-        // Null case
-        assert_eq!(tree.search("k99"), None);
     }
 }
