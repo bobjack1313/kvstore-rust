@@ -66,3 +66,6 @@ cargo run
 ```bash
 cargo test
 ```
+
+### Gradebot Evaluation
+Do not use cargo to run the file. Make sure you build the project first, then use `./target/debug/kvstore` to run.
