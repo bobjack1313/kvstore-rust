@@ -11,7 +11,7 @@ The implementation follows an append-only storage model, with an in-memory index
 
 ---
 
-## Current Features (Phase 1 Completed)
+## Current Features (Part 1 Completed)
 - **Command-line interface (CLI)** with support for:
   - `SET <key> <value>` - Store a key-value pair (acknowledges with `OK` and the entry)
   - `GET <key>` - Retrieve a value (currently placeholder, prints entered key and `NULL`)
@@ -28,24 +28,37 @@ The implementation follows an append-only storage model, with an in-memory index
   - Clear commenting and file headers
   - Case normalization limited to commands (keys/values preserved)
 
----
+## Roadmap
 
-## Planned Features
-1. **Persistence (Phase 2)**  
-   - On `SET`, append to an append-only log file (`data.db`)  
-   - Flush to disk for crash durability  
+Part 1 (Complete)
+- REPL loop
+- Persistent logging
+- B-Tree insert/search/delete
 
-2. **Log Replay on Startup**  
-   - On program start, replay all records from `data.db` into an in-memory index  
+Part 2 (Planned)
+- Convert to B+ Tree (values only in leaves, linked leaf layer).
+- Enhanced range queries (SCAN key1 key2).
+- More advanced integration tests.
 
-3. **In-Memory Index**  
-   - Begin with a simple vector-based index (linear scan, last-write-wins)  
-   - Later replace with a B+Tree index for efficiency (Project 2)  
+Future Improvements
 
----
+Configurable degree t via command-line flag.
+Benchmarking and performance tuning.
+Optional crash recovery simulation.
 
 ## Usage
 
 ### Build
 ```bash
 cargo build
+```
+
+### Run
+```bash
+cargo run
+```
+
+### Test
+```bash
+cargo test
+```
