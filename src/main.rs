@@ -13,13 +13,19 @@
 //   testing (Gradebot). In this initial version,
 //   storage and indexing logic are simplified placeholders.
 // ============================================================
-
+use std::fs::OpenOptions;
 
 /// Entry point for the key-value store assignment.
 fn main() {
-    println!("Key Value Store");
+
     // Initialize the Btree in local mem
     let mut tree_index = kvstore::BTreeIndex::new(2);
+
+    // Initialize db file
+    let _ = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open("data.db");
 
     // Load data from file
     kvstore::load_data(&mut tree_index);
