@@ -47,7 +47,7 @@ pub fn load_data(index: &mut BTreeIndex) {
 
     // Replay log before starting program
     if let Ok(data_records) = storage::replay_log(storage::DATA_FILE) {
-        println!("Replayed {} records from {}", data_records.len(), storage::DATA_FILE);
+        //println!("Replayed {} records from {}", data_records.len(), storage::DATA_FILE);
 
         for record in data_records {
 
@@ -152,7 +152,7 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, index: &mut B
                } else {
                     // Success log write - now store in mem
                     index.insert(args[0].clone(), args[1].clone());
-                    println!("Setting key: {} - value: {}", args[0], args[1]);
+                    //println!("Setting key: {} - value: {}", args[0], args[1]);
                 }
 
             } else {

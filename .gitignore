@@ -24,3 +24,7 @@ target
 
 # Data base files created by the program
 *.db
+
+
+# Gradebot installed dir
+CSCE5350_gradebot/
