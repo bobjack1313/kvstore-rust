@@ -46,6 +46,10 @@ Configurable degree t via command-line flag.
 Benchmarking and performance tuning.
 Optional crash recovery simulation.
 
+## Requirements
+- Rust (edition 2021 or later).  
+  If not installed, visit [rust-lang.org/tools/install](https://www.rust-lang.org/tools/install).
+
 ## Usage
 
 ### Build
