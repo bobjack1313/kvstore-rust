@@ -28,8 +28,6 @@
 /// Basic Foundational BTree Node
 #[derive(Debug)]
 pub struct BTreeNode {
-    /// Key–value pairs stored in this node.
-    /// Keys are kept sorted so we can binary search efficiently.
     pub kv_pairs: Vec<(String, String)>,
     /// Box allows Rust to recursivley move through values and nodes - Heap
     pub children: Vec<Box<BTreeNode>>,

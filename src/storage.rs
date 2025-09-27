@@ -69,19 +69,26 @@ pub fn append_write(filename: &str, input_data: &str) -> io::Result<()> {
 pub fn replay_log(filename: &str) -> io::Result<Vec<String>> {
     let mut data_records = Vec::new();
 
-    if let Ok(data_file_retrieved) = File::open(filename) {
-        let buf_reader = BufReader::new(data_file_retrieved);
+    // Using match to compare OK with Err to add better handling
+    match File::open(filename) {
 
-        for line in buf_reader.lines() {
-            if let Ok(data_entry) = line {
+        // Valid opening, pushing records
+        Ok(file) => {
+            let buf_reader = BufReader::new(file);
+
+            for line in buf_reader.lines() {
+                let data_entry = line?;
                 let trimmed = data_entry.trim();
                 if !trimmed.is_empty() {
                     data_records.push(trimmed.to_string());
                 }
             }
+            Ok(data_records)
         }
+        // Missing file = empty Vec - The end commas will not return
+        Err(ref e) if e.kind() == io::ErrorKind::NotFound => Ok(vec![]),
+        Err(e) => Err(e),
     }
-    Ok(data_records)
 }
 
 
@@ -102,8 +109,7 @@ mod storage_tests {
         p.to_string_lossy().into_owned()
     }
 
-    // Helper for resetting file for tests. Run before to make sure file
-    // doesnt exist and after to del the file from dir
+    // Reset helper
     fn clean(path: &str) {
         let _ = fs::remove_file(path);
     }

@@ -217,8 +217,7 @@ impl BTreeIndex {
             node.kv_pairs[idx].1 = value;
             return;
         }
-        // Recurse case - inside node
-        // Check index child is not full
+        // Recurse case (inside node): Check index child is not full
         if node.children[idx].kv_pairs.len() == 2 * t - 1 {
             Self::split_child(node, t, idx);
 
@@ -260,7 +259,6 @@ impl BTreeIndex {
         let mut right = Box::new(BTreeNode::new(full_child.is_leaf));
 
         // Right node gets t-1 largest kv_pairs
-        // keep [0..t) in child ------ [t..] to right
         right.kv_pairs = full_child.kv_pairs.split_off(t);
         // Grab  the middle node
         let middle = full_child.kv_pairs.pop().expect("full child must have middle");
