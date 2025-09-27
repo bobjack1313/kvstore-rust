@@ -42,7 +42,34 @@ pub enum CommandResult {
 }
 
 
-/// Loads data from file into active storage
+/// Load persisted log data into a `BTreeIndex`.
+///
+/// Reads all entries from the log file and replays them into the
+/// provided B-tree, so the in-memory state matches the persisted state.
+///
+/// # Arguments
+///
+/// * `index` - A mutable reference to the `BTreeIndex` that will be populated.
+///
+/// # Behavior
+///
+/// - Uses [`replay_log`](crate::replay_log) to read the log file.
+/// - Inserts each `SET` entry into the B-tree.
+/// - Ignores malformed lines.
+///
+/// # Example
+/// ```
+/// use kvstore::{BTreeIndex, load_data};
+///
+/// let mut index = BTreeIndex::new(2);
+/// // Simulate persisted data
+/// std::fs::write("data.db", "SET dog bark\nSET cat meow\n").unwrap();
+///
+/// load_data(&mut index);
+///
+/// assert_eq!(index.search("dog"), Some("bark"));
+/// assert_eq!(index.search("cat"), Some("meow"));
+/// ```
 pub fn load_data(index: &mut BTreeIndex) {
 
     // Replay log before starting program
@@ -68,6 +95,26 @@ pub fn load_data(index: &mut BTreeIndex) {
 
 
 /// Read, evaluate, and print loop to handle command line instructions.
+///
+/// Continuously reads commands from standard input, executes them against
+/// the provided `BTreeIndex`, and prints results back to the user.
+///
+/// # Supported Commands
+/// - `SET <key> <value>` — Insert or update a key-value pair.
+/// - `GET <key>` — Retrieve the value for a key.
+/// - `EXIT` — Quit the REPL.
+///
+/// # Arguments
+///
+/// * `index` - A mutable reference to the `BTreeIndex` that stores key–value data.
+///
+/// # Example
+/// ```no_run
+/// use kvstore::{BTreeIndex, repl_loop};
+///
+/// let mut index = BTreeIndex::new(2);
+/// repl_loop(&mut index); // <- waits for user input interactively
+///
 pub fn repl_loop(index: &mut BTreeIndex) {
     let stdin = io::stdin();
     let proper_syntax = "Syntax Usage: GET <key>, SET <key> <value>, EXIT";

@@ -62,8 +62,32 @@ impl BTreeNode {
         }
     }
 
+
     /// Binary search helper: returns the index of the key if found,
     /// or the position where it should be inserted otherwise.
+    ///
+    /// # Arguments
+    ///
+    /// * `key` - The key to compare against the node’s stored keys.
+    ///
+    /// # Returns
+    ///
+    /// The index of the first key that is >= `key`.
+    /// If all stored keys are less than `key`, returns the length of the vector
+    /// (i.e., the "end" position).
+    ///
+    /// # Example
+    /// ```
+    /// use kvstore::BTreeNode;
+    ///
+    /// let mut node = BTreeNode::new(true);
+    /// node.kv_pairs.push(("cat".to_string(), "meow".to_string()));
+    /// node.kv_pairs.push(("dog".to_string(), "bark".to_string()));
+    ///
+    /// assert_eq!(node.lower_bound("ant"), 0);
+    /// assert_eq!(node.lower_bound("dog"), 1);
+    /// assert_eq!(node.lower_bound("elephant"), 2);
+    /// ```
     pub fn lower_bound(&self, key: &str) -> usize {
         self.kv_pairs
             .binary_search_by(|(k, _)| k.as_str().cmp(key))

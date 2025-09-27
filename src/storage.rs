@@ -37,6 +37,16 @@ pub const DATA_FILE: &str = "data.db";
 /// # Returns
 /// * `Ok(())` if the line was successfully written and flushed.
 /// * `Err(io::Error)` if the file could not be opened or written to.
+///
+/// # Example
+/// ```
+/// use kvstore::append_write;
+/// let file = "example.db";
+/// std::fs::write(file, "").unwrap();
+/// append_write(file, "SET dog bark").unwrap();
+/// let contents = std::fs::read_to_string(file).unwrap();
+/// assert!(contents.contains("SET dog bark"));
+/// ```
 pub fn append_write(filename: &str, input_data: &str) -> io::Result<()> {
 
     // Access the data file, create if needed
@@ -66,6 +76,21 @@ pub fn append_write(filename: &str, input_data: &str) -> io::Result<()> {
 /// # Returns
 /// * `Ok(Vec<String>)` containing all non-empty lines, in order.
 /// * `Err(io::Error)` if the file could not be opened or read.
+///
+/// # Example
+/// ```
+/// use kvstore::{append_write, replay_log};
+///
+/// // Write some SET commands to a temporary file
+/// let file = "example_replay.db";
+/// std::fs::write(file, "").unwrap();
+/// append_write(file, "SET dog bark").unwrap();
+/// append_write(file, "SET cat meow").unwrap();
+///
+/// // Replay the log back into memory
+/// let records = replay_log(file).unwrap();
+/// assert_eq!(records, vec!["SET dog bark", "SET cat meow"]);
+/// ```
 pub fn replay_log(filename: &str) -> io::Result<Vec<String>> {
     let mut data_records = Vec::new();
 

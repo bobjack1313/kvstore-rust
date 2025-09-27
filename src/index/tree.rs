@@ -63,6 +63,15 @@ impl BTreeIndex {
     /// # Notes
     /// - Keys are compared in sorted order using `lower_bound`.
     /// - Search runs in **O(log n)** time due to B-tree height guarantees.
+    ///
+    /// # Example
+    /// ```
+    /// use kvstore::BTreeIndex;
+    /// let mut t = BTreeIndex::new(2);
+    /// t.insert("dog".into(), "bark".into());
+    /// assert_eq!(t.search("dog"), Some("bark"));
+    /// assert_eq!(t.search("cat"), None);
+    /// ```
     pub fn search(&self, key: &str) -> Option<&str> {
 
         // Recursive function declaration for node search
@@ -103,6 +112,26 @@ impl BTreeIndex {
     /// # Notes
     /// This is the primary public interface for modifying the B-tree.
     /// Internally, it calls [`insert_inside`] and may trigger [`split_child`].
+    ///
+    /// # Example
+    /// ```
+    /// use kvstore::BTreeIndex;
+    ///
+    /// // Create a B-tree with minimum degree 2
+    /// let mut index = BTreeIndex::new(2);
+    ///
+    /// // Insert key–value pairs
+    /// index.insert("dog".into(), "bark".into());
+    /// index.insert("cat".into(), "meow".into());
+    ///
+    /// // Verify values can be retrieved
+    /// assert_eq!(index.search("dog"), Some("bark"));
+    /// assert_eq!(index.search("cat"), Some("meow"));
+    ///
+    /// // Overwrite existing key
+    /// index.insert("dog".into(), "woof".into());
+    /// assert_eq!(index.search("dog"), Some("woof"));
+    /// ```
     pub fn insert(&mut self, key: String, value: String) {
         let t = self.t;
 
