@@ -76,20 +76,36 @@ pub fn load_data(index: &mut BTreeIndex) {
     if let Ok(data_records) = storage::replay_log(storage::DATA_FILE) {
         //println!("Replayed {} records from {}", data_records.len(), storage::DATA_FILE);
 
-        for record in data_records {
+        for (idx, record) in data_records.iter().enumerate() {
 
-            // Split "SET key value"
+            // Split "SET key value" into up to 3 parts
             let mut segments = record.splitn(3, char::is_whitespace);
             let cmd = segments.next().unwrap_or("");
 
             if cmd == "SET" {
-                if let (Some(key), Some(value)) = (segments.next(), segments.next()) {
+                // Handle improper SET lines
+                match (segments.next(), segments.next()) {
                     // Values exist, insert into tree
-                    index.insert(key.to_string(), value.to_string());
+                    (Some(key), Some(value)) => {
+                        index.insert(key.to_string(), value.to_string());
+                    }
+                    _ => {
+                        eprintln!("Warning: malformed SET command at line {}: {}", idx + 1, record);
+                    }
                 }
+            // Currently only SET should be in logs, NOTE: this must change if more logged cmds are added
+            } else if !cmd.is_empty() {
+                // Ignore blank lines silently, warn on unexpected command
+                eprintln!("Warning: unknown command '{}' at line {}: {}", cmd, idx + 1, record);
             }
         }
-        //println!("{:#?}", index);
+
+    // Function replay_log failed to read the file
+    } else {
+        eprintln!(
+            "Warning: could not read log file '{}'. Starting with empty index.",
+            storage::DATA_FILE
+        );
     }
 }
 

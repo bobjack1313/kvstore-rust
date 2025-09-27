@@ -21,8 +21,6 @@
 //   handling work correctly together, simulating how the professor’s
 //   Gradebot will interact with the program.
 // =====================================================================
-
-
 #[allow(unused_imports)]
 use kvstore::{BTreeIndex, append_write, replay_log};
 

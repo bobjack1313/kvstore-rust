@@ -103,7 +103,6 @@ mod index_tests {
 // =================================================================
 #[cfg(test)]
 mod index_insertion_tests {
-    use crate::BTreeNode;
     use crate::BTreeIndex;
 
     #[test]
@@ -163,7 +162,6 @@ mod index_insertion_tests {
 // =================================================================
 #[cfg(test)]
 mod index_expanded_search_tests {
-    use crate::BTreeNode;
     use crate::BTreeIndex;
 
     #[test]
@@ -230,7 +228,6 @@ mod index_expanded_search_tests {
 // =================================================================
 #[cfg(test)]
 mod index_delete_tests {
-    use crate::BTreeNode;
     use crate::BTreeIndex;
 
     /// Helper to make a tree with degree 2 and some inserts
