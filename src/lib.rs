@@ -21,8 +21,20 @@
 //   This module implements the command-line interface (CLI)
 //   that accepts the following commands:
 //
-//     `SET <key> <value>`   -> Store a key-value pair
-//     `GET <key>`           -> Retrieve the value for a key
+//     `SET <key> <value>` -> Store a key-value pair
+//     `GET <key>`         -> Retrieve the value for a key
+//     `DEL <key>`         -> Deletes key entry: 1 if removed, 0 if not found
+//     `EXISTS <key>`      -> Indicated presence of key: 1 if present and not expired, else 0
+//     `MSET <k1> <v1> [<k2> <v2> ...]` -> Sets multiple keys: OK if valid
+//     `MGET <k1> [<k2> ...]` -> Gets multiple keys: one line per key: the value or nil
+//     `BEGIN`             -> To start a transaction (no nesting): OK if valid
+//     `COMMIT`            -> Apply atomically buffered writes: OK if valid
+//     `ABORT`             -> Discard buffer writes: OK if valid
+//     `EXPIRE` <key> <milliseconds> -> Expires key: 1 if TTL set, 0 if key missing
+//     `TTL <key>`         -> Remaining milliseconds (integer): -1 if no TTL, -2 if missing/expired
+//     `PERSIST <key>`     -> Sets persist for key: 1 if TTL cleared, 0 otherwise
+//     `RANGE <start> <end>` -> List keys in lexicographic order (inclusive):
+//                              empty string means open bound; print one key per line then a final END
 //     `EXIT`                -> Terminate the program
 // =====================================================================
 mod storage;
@@ -174,6 +186,7 @@ fn parse_command(line: &str) -> (String, Vec<String>) {
 /// Supported commands:
 /// - `GET <key>`: Attempts to retrieve a value by key (currently placeholder logic).
 /// - `SET <key> <value>`: Stores a key-value pair and appends it to the log file.
+//  - `DEL <key>`         -> Deletes key entry: 1 if removed, 0 if not found
 /// - `EXIT`: Terminates the REPL loop.
 /// - Any other input: Prints an error and redisplays the syntax.
 ///
@@ -221,6 +234,31 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, index: &mut B
             } else {
                 // Error for not enough arguments for SET
                 println!("ERROR: SET requires a key and value");
+            }
+            CommandResult::Continue
+        }
+
+        // Delete command format:  DEL <key>
+        "DEL" => {
+            if args.len() < 1 {
+                // Error for not enough arguments for DEL
+                println!("ERR: DEL requires a key");
+            } else if args.len() > 1 {
+                // Error for not enough arguments for DEL
+                println!("ERR: Too many arguments for DEL");
+            } else {
+                // 1 Arg is correct
+                if let Some(key) = args.get(0) {
+                    match index.search(key) {
+                        Some(_) => {
+                            index.delete(key);
+                            println!("1"); // deleted successfully
+                        }
+                        None => println!("0"), // key didn’t exist
+                    }
+                } else {
+                    println!("ERR: No Key found");
+                }
             }
             CommandResult::Continue
         }
@@ -335,5 +373,27 @@ mod main_lib_tests {
         let (cmd, args) = parse_command("seT anykey goats");
         assert_eq!(cmd, "SET");
         assert_eq!(args, vec!["anykey", "goats"]);
+    }
+
+    #[test]
+    fn test_del_command() {
+        let mut tree = BTreeIndex::new(2);
+
+        // First, insert a key to delete
+        handle_command("SET", &vec!["mykey".to_string(), "myvalue".to_string()], "Usage", &mut tree);
+
+        // Delete existing key (expect success = 1)
+        let (cmd, args) = parse_command("DEL mykey");
+        assert_eq!(cmd, "DEL");
+        assert_eq!(args.len(), 1);
+        let result = handle_command(&cmd, &args, "Usage", &mut tree);
+        assert!(matches!(result, CommandResult::Continue));
+
+        // Delete non-existing key (expect fail = 0)
+        let (cmd2, args2) = parse_command("DEL notfound");
+        assert_eq!(cmd2, "DEL");
+        assert_eq!(args2.len(), 1);
+        let result2 = handle_command(&cmd2, &args2, "Usage", &mut tree);
+        assert!(matches!(result2, CommandResult::Continue));
     }
 }
