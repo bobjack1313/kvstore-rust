@@ -2,7 +2,7 @@
 // File: integration_kv.rs
 // Author: Bob Jack
 // Course: CSCE 5350: Fundamentals of Database Systems
-// Midterm/Final Project Part 1
+// Midterm/Final Project
 // Date: Sept 23, 2025
 //
 // Description:
@@ -141,4 +141,33 @@ fn test_case_insensitive_commands() {
     assert_eq!(tree.search("CAT"), Some("meow"));
     assert_eq!(tree.search("GOLD"), Some("fish"));
     assert_eq!(tree.search("DOG"), Some("bark"));
+}
+
+
+#[test]
+fn test_delete_persists() {
+    let file = "integration_delete.db";
+    setup_file(file);
+
+    // Write a SET and a DEL to the log
+    append_write(file, "SET cat meow").unwrap();
+    append_write(file, "DEL cat").unwrap();
+
+    // Rebuild index from the log
+    let records = replay_log(file).unwrap();
+    let mut tree = BTreeIndex::new(2);
+    for line in records {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.is_empty() {
+            continue;
+        }
+        match parts[0] {
+            "SET" if parts.len() == 3 => tree.insert(parts[1].into(), parts[2].into()),
+            "DEL" if parts.len() == 2 => { tree.delete(parts[1]); },
+            _ => {}
+        }
+    }
+
+    // After replaying, the deleted key should no longer exist
+    assert_eq!(tree.search("cat"), None);
 }

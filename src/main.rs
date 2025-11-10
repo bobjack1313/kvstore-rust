@@ -2,7 +2,7 @@
 // File: main.rs
 // Author: Bob Jack
 // Course: CSCE 5350: Fundamentals of Database Systems
-// Midterm/Final Project Part 1
+// Midterm/Final Project
 // Date: Sept 19, 2025
 //
 // Description:

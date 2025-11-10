@@ -15,7 +15,7 @@
 // File: lib.rs
 // Author: Bob Jack
 // Course: CSCE 5350: Fundamentals of Database Systems
-// Midterm/Final Project Part 1
+// Midterm/Final Project
 // Date: Sept 20, 2025
 //
 //   This module implements the command-line interface (CLI)
@@ -183,12 +183,7 @@ fn parse_command(line: &str) -> (String, Vec<String>) {
 
 /// Handles a single user command and returns whether the REPL should continue or exit.
 ///
-/// Supported commands:
-/// - `GET <key>`: Attempts to retrieve a value by key (currently placeholder logic).
-/// - `SET <key> <value>`: Stores a key-value pair and appends it to the log file.
-//  - `DEL <key>`         -> Deletes key entry: 1 if removed, 0 if not found
-/// - `EXIT`: Terminates the REPL loop.
-/// - Any other input: Prints an error and redisplays the syntax.
+/// - Only supported commands will operate - Any other input: Prints an error and redisplays the syntax.
 ///
 /// Returns:
 /// - `CommandResult::Continue` if the loop should keep running.
@@ -251,14 +246,170 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, index: &mut B
                 if let Some(key) = args.get(0) {
                     match index.search(key) {
                         Some(_) => {
+                            // Sucessful delete
                             index.delete(key);
-                            println!("1"); // deleted successfully
+                            println!("1");
                         }
-                        None => println!("0"), // key didn’t exist
+                        // Key doesn't exist
+                        None => println!("0"),
                     }
                 } else {
                     println!("ERR: No Key found");
                 }
+            }
+            CommandResult::Continue
+        }
+
+        // Exists command format:  EXISTS <key>
+        "EXISTS" => {
+            if args.len() < 1 {
+                // Error for not enough arguments for EXISTS
+                println!("ERR: EXISTS requires a key");
+            } else if args.len() > 1 {
+                // Error for not enough arguments for EXISTS
+                println!("ERR: Too many arguments for EXISTS");
+            } else {
+                // 1 Arg is correct
+                if let Some(key) = args.get(0) {
+                    match index.search(key) {
+                        // Key exists
+                        Some(_) => {
+                            // TODO: Implement command
+
+
+                            //println!("1");
+                            // Returning 0 for stub
+                            println!("0");
+
+                        }
+                        // No key found
+                        None => println!("0"),
+                    }
+                } else {
+                    println!("ERR: No Key found");
+                }
+            }
+            CommandResult::Continue
+        }
+
+        // MSET command format: MSET <k1> <v1> [<k2> <v2> ...]
+        "MSET" => {
+            // Could have many args
+            if args.len() >= 2 {
+                // TODO: Implement command
+
+                    // Success log write - now store in mem
+                 //   index.insert(args[0].clone(), args[1].clone());
+                    //println!("Setting key: {} - value: {}", args[0], args[1]);
+
+            } else {
+                // Error for not enough arguments for MSET
+                println!("ERROR: MSET requires a key and multiple values");
+            }
+            CommandResult::Continue
+        }
+
+        // MGET command <k1> [<k2> ...]
+        "MGET" => {
+            // Could have many args
+            if args.len() >= 2 {
+                // TODO: Implement command
+
+                    // Success log write - now store in mem
+
+            //        index.insert(args[0].clone(), args[1].clone());
+                    //println!("Setting key: {} - value: {}", args[0], args[1]);
+
+
+            } else {
+                // Error for not enough arguments for MGET
+                println!("ERROR: MGET requires a key and multiple values");
+            }
+            CommandResult::Continue
+        }
+
+        // BEGIN command
+        "BEGIN" => {
+            // Could have many args
+            if args.len() > 1 {
+                // TODO: Implement command
+
+            } else {
+                // Error for added arguments
+                println!("ERROR: Too many arguments for BEGIN");
+            }
+            CommandResult::Continue
+        }
+
+        // COMMIT command
+        "COMMIT" => {
+            // Could have many args
+            if args.len() > 1 {
+                // TODO: Implement command
+            } else {
+                // Error for added arguments
+                println!("ERROR: Too many arguments for COMMIT");
+            }
+            CommandResult::Continue
+        }
+
+        // ABORT command
+        "ABORT" => {
+            // Could have many args
+            if args.len() > 1 {
+                // TODO: Implement command
+            } else {
+                // Error for added arguments
+                println!("ERROR: Too many arguments for ABORT");
+            }
+            CommandResult::Continue
+        }
+
+        "EXPIRE" => {
+            if args.len() == 2 {
+
+            // TODO: Implement command
+            } else {
+                // Error for not enough arguments for EXPIRE
+                println!("ERROR: EXPIRE requires a key and millisecond value");
+            }
+            CommandResult::Continue
+        }
+
+        "TTL" => {
+            if args.len() >= 2 {
+
+            // TODO: Implement command
+            //     `TTL <key>`         -> Remaining milliseconds (integer): -1 if no TTL, -2 if missing/expired
+            } else {
+                // Error for not enough arguments for TTL
+                println!("ERROR: TTL requires a key and millisecond value");
+            }
+            CommandResult::Continue
+        }
+
+        "PERSIST" => {
+            if args.len() >= 2 {
+
+            // TODO: Implement command
+
+            } else {
+                // Error for not enough arguments for PERSIST
+                println!("ERR: PERSIST requires a key");
+            }
+            CommandResult::Continue
+        }
+
+        "RANGE" => {
+            if args.len() >= 2 {
+
+            // TODO: Implement command
+//     `RANGE <start> <end>` -> List keys in lexicographic order (inclusive):
+//                              empty string means open bound; print one key per line then a final END
+
+            } else {
+                // Error for not enough arguments for RANGE
+                println!("ERR: RANGE requires a start and end");
             }
             CommandResult::Continue
         }
