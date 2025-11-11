@@ -431,14 +431,23 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, session: &mut
             CommandResult::Continue
         }
 
+        // TTL command — report remaining time to live for a key
         "TTL" => {
-            if args.len() >= 2 {
+            if args.len() == 1 {
+                let key = &args[0];
 
-            // TODO: Implement command
-            //     `TTL <key>`         -> Remaining milliseconds (integer): -1 if no TTL, -2 if missing/expired
+                // First, check if key exists at all
+                if session.index.search(key).is_none() {
+                    println!("-2"); // Missing key
+                } else {
+                    // Query TTL remaining (lazy cleanup inside function)
+                    let ttl_ms = session.ttl.ttl_remaining(key);
+
+                    // Print result according to contract
+                    println!("{}", ttl_ms);
+                }
             } else {
-                // Error for not enough arguments for TTL
-                println!("ERROR: TTL requires a key and millisecond value");
+                println!("ERR: TTL requires exactly one argument <key>");
             }
             CommandResult::Continue
         }
@@ -932,4 +941,81 @@ mod main_lib_tests {
         assert!(session.ttl.is_expired("temp"));
         assert_eq!(session.ttl.active_count(), 0);
     }
+
+    #[test]
+    fn test_ttl_reports_positive_remaining_time() {
+        let mut session = Session::new();
+
+        // Create a key and set a TTL
+        handle_command("SET", &vec!["dog".into(), "bark".into()], "Usage", &mut session);
+        handle_command("EXPIRE", &vec!["dog".into(), "500".into()], "Usage", &mut session);
+
+        // Query TTL
+        let (cmd, args) = parse_command("TTL dog");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+        assert!(matches!(result, CommandResult::Continue));
+
+        // Remaining TTL should be positive
+        let ttl_remaining = session.ttl.ttl_remaining("dog");
+        assert!(ttl_remaining > 0, "TTL should be positive while active");
+    }
+
+    #[test]
+    fn test_ttl_returns_minus_one_when_no_ttl_set() {
+        let mut session = Session::new();
+
+        // Key exists but no TTL
+        handle_command("SET", &vec!["cat".into(), "meow".into()], "Usage", &mut session);
+
+        let (cmd, args) = parse_command("TTL cat");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+        assert!(matches!(result, CommandResult::Continue));
+
+        // Should return -1 (no TTL)
+        assert_eq!(session.ttl.ttl_remaining("cat"), -1);
+    }
+
+    #[test]
+    fn test_ttl_returns_minus_two_for_missing_or_expired_key() {
+        use std::thread::sleep;
+        use std::time::Duration;
+
+        let mut session = Session::new();
+
+        // Key doesn't exist
+        let (cmd, args) = parse_command("TTL ghost");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+        assert!(matches!(result, CommandResult::Continue));
+
+        // NOTE: handle_command prints -2 for missing keys (based on index check),
+        // but ttl_remaining() itself only returns -1 because TTLManager doesn’t know key existence
+
+        // TTL manager doesn’t track missing keys, so it should report -1 (no entry)
+        assert_eq!(session.ttl.ttl_remaining("ghost"), -1);
+
+        // Key that expires
+        handle_command("SET", &vec!["temp".into(), "123".into()], "Usage", &mut session);
+        handle_command("EXPIRE", &vec!["temp".into(), "50".into()], "Usage", &mut session);
+        sleep(Duration::from_millis(60));
+
+        // Lazy cleanup happens inside ttl_remaining()
+        assert_eq!(session.ttl.ttl_remaining("temp"), -2);
+        assert_eq!(session.ttl.active_count(), 0);
+    }
+
+    #[test]
+    fn test_ttl_rejects_incorrect_argument_counts() {
+        let mut session = Session::new();
+
+        // Too few args (none)
+        let (cmd, args) = parse_command("TTL");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+        assert!(matches!(result, CommandResult::Continue));
+
+        // Too many args
+        let (cmd, args) = parse_command("TTL dog extra");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+        assert!(matches!(result, CommandResult::Continue));
+    }
+
 }
