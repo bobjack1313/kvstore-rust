@@ -452,14 +452,24 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, session: &mut
             CommandResult::Continue
         }
 
+        // PERSIST command — remove any active TTL from a key
         "PERSIST" => {
-            if args.len() >= 2 {
+            if args.len() == 1 {
+                let key = &args[0];
 
-            // TODO: Implement command
-
+                // Only attempt to clear TTL if key exists
+                if session.index.search(key).is_some() {
+                    let removed = session.ttl.clear_expiration(key);
+                    if removed {
+                        println!("OK: TTL cleared for key '{}'", key);
+                    } else {
+                        println!("(nil) No TTL was set for key '{}'", key);
+                    }
+                } else {
+                    println!("ERR: Key '{}' does not exist", key);
+                }
             } else {
-                // Error for not enough arguments for PERSIST
-                println!("ERR: PERSIST requires a key");
+                println!("ERR: PERSIST requires exactly one argument <key>");
             }
             CommandResult::Continue
         }
@@ -1016,6 +1026,94 @@ mod main_lib_tests {
         let (cmd, args) = parse_command("TTL dog extra");
         let result = handle_command(&cmd, &args, "Usage", &mut session);
         assert!(matches!(result, CommandResult::Continue));
+    }
+
+    #[test]
+    fn test_persist_clears_existing_ttl() {
+        let mut session = Session::new();
+
+        // Create a key with a TTL
+        handle_command("SET", &vec!["dog".into(), "bark".into()], "Usage", &mut session);
+        handle_command("EXPIRE", &vec!["dog".into(), "1000".into()], "Usage", &mut session);
+        assert!(session.ttl.has_entry("dog"));
+
+        // Persist (remove TTL)
+        let (cmd, args) = parse_command("PERSIST dog");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+        assert!(matches!(result, CommandResult::Continue));
+
+        // TTL should be gone
+        assert!(!session.ttl.has_entry("dog"));
+        assert_eq!(session.ttl.active_count(), 0);
+    }
+
+    #[test]
+    fn test_persist_on_key_without_ttl() {
+        let mut session = Session::new();
+
+        // Create a key but don’t assign TTL
+        handle_command("SET", &vec!["cat".into(), "meow".into()], "Usage", &mut session);
+        assert_eq!(session.ttl.active_count(), 0);
+
+        // Run PERSIST
+        let (cmd, args) = parse_command("PERSIST cat");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+        assert!(matches!(result, CommandResult::Continue));
+
+        // Still no TTL
+        assert_eq!(session.ttl.active_count(), 0);
+    }
+
+    #[test]
+    fn test_persist_rejects_missing_key() {
+        let mut session = Session::new();
+
+        // Try to persist a key that doesn’t exist
+        let (cmd, args) = parse_command("PERSIST ghost");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+        assert!(matches!(result, CommandResult::Continue));
+
+        // TTL manager remains empty
+        assert_eq!(session.ttl.active_count(), 0);
+    }
+
+    #[test]
+    fn test_persist_rejects_invalid_argument_count() {
+        let mut session = Session::new();
+
+        // Missing argument
+        let (cmd, args) = parse_command("PERSIST");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+        assert!(matches!(result, CommandResult::Continue));
+
+        // Too many arguments
+        let (cmd, args) = parse_command("PERSIST dog extra");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+        assert!(matches!(result, CommandResult::Continue));
+
+        // TTL state unchanged
+        assert_eq!(session.ttl.active_count(), 0);
+    }
+
+    #[test]
+    fn test_persist_on_expired_key() {
+        use std::thread::sleep;
+        use std::time::Duration;
+
+        let mut session = Session::new();
+
+        // Create key with short TTL
+        handle_command("SET", &vec!["temp".into(), "123".into()], "Usage", &mut session);
+        handle_command("EXPIRE", &vec!["temp".into(), "50".into()], "Usage", &mut session);
+        sleep(Duration::from_millis(60));
+
+        // Key is expired — should behave like missing
+        let (cmd, args) = parse_command("PERSIST temp");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+        assert!(matches!(result, CommandResult::Continue));
+
+        // TTL map should be empty
+        assert_eq!(session.ttl.active_count(), 0);
     }
 
 }
