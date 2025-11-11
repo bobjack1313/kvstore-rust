@@ -171,3 +171,25 @@ fn test_delete_persists() {
     // After replaying, the deleted key should no longer exist
     assert_eq!(tree.search("cat"), None);
 }
+
+#[test]
+fn test_ttl_does_not_persist_across_restart() {
+    let file = "integration_ttl_persist.db";
+    setup_file(file);
+
+    append_write(file, "SET temp 123").unwrap();
+    append_write(file, "EXPIRE temp 5000").unwrap(); // Not persisted logically
+
+    // Replay simulates restart
+    let records = replay_log(file).unwrap();
+    let mut tree = BTreeIndex::new(2);
+    for line in records {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() == 3 && parts[0].eq_ignore_ascii_case("SET") {
+            tree.insert(parts[1].into(), parts[2].into());
+        }
+    }
+
+    // TTLs vanish on restart, but value remains
+    assert_eq!(tree.search("temp"), Some("123"));
+}
