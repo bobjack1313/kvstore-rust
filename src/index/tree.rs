@@ -195,6 +195,72 @@ impl BTreeIndex {
     }
 
 
+    /// Collect all keys stored in the B-tree in lexicographic order.
+    ///
+    /// Performs an **in-order traversal** of the tree to gather keys
+    /// into the provided vector. This method is primarily used by
+    /// range-based operations (e.g., `RANGE <start> <end>`), ensuring
+    /// keys are returned in sorted order regardless of insertion order.
+    ///
+    /// # Arguments
+    /// * `keys` - A mutable reference to a vector that will be populated
+    ///   with all key strings in lexicographic order.
+    ///
+    /// # Returns
+    /// * This function does not return a value; it appends keys to the
+    ///   provided vector.
+    ///
+    /// # Notes
+    /// - Duplicates are not expected, as each key in the B-tree is unique.
+    /// - The traversal runs in **O(n)** time, where *n* is the number of keys.
+    /// - Leaf and internal nodes are visited recursively, maintaining
+    ///   lexicographic ordering at every level.
+    ///
+    /// # Example
+    /// ```
+    /// use kvstore::BTreeIndex;
+    ///
+    /// let mut tree = BTreeIndex::new(2);
+    /// tree.insert("dog".into(), "bark".into());
+    /// tree.insert("cat".into(), "meow".into());
+    /// tree.insert("ant".into(), "tiny".into());
+    ///
+    /// let mut keys = Vec::new();
+    /// tree.collect_keys(&mut keys);
+    ///
+    /// assert_eq!(keys, vec!["ant", "cat", "dog"]);
+    /// ```
+    ///
+    /// # Testing
+    /// This method is tested indirectly through the `RANGE` command
+    /// integration tests, which rely on ordered key collection.
+    /// Direct testing can also verify lexicographic ordering:
+    /// ```
+    /// use kvstore::BTreeIndex;
+    /// let mut tree = BTreeIndex::new(2);
+    /// let mut keys = Vec::new();
+    /// tree.collect_keys(&mut keys);
+    /// assert!(keys.windows(2).all(|w| w[0] <= w[1]));
+    /// ```
+    pub fn collect_keys(&self, keys: &mut Vec<String>) {
+        // Recursive helper to traverse the B-tree in lexicographic order.
+        fn traverse(node: &BTreeNode, keys: &mut Vec<String>) {
+            for i in 0..node.kv_pairs.len() {
+                if !node.is_leaf {
+                    traverse(&node.children[i], keys);
+                }
+                keys.push(node.kv_pairs[i].0.clone());
+            }
+            if !node.is_leaf {
+                traverse(&node.children[node.kv_pairs.len()], keys);
+            }
+        }
+
+        // Begin traversal from the root node.
+        traverse(&self.root, keys);
+    }
+
+
     // =========================
     // Insertion helpers
     // =========================

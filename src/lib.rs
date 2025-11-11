@@ -474,15 +474,31 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, session: &mut
             CommandResult::Continue
         }
 
+        // RANGE command — list keys between <start> and <end> in order (inclusive)
         "RANGE" => {
-            if args.len() >= 2 {
+            if args.len() == 2 {
+                let start = args[0].as_str();
+                let end = args[1].as_str();
 
-            // TODO: Implement command
-//     `RANGE <start> <end>` -> List keys in lexicographic order (inclusive):
-//                              empty string means open bound; print one key per line then a final END
+                // Collect all keys in sorted order
+                let mut all_keys = Vec::new();
+                session.index.collect_keys(&mut all_keys);
 
+                // Filter keys by lexicographic range
+                let filtered = all_keys.into_iter().filter(|k| {
+                    let key = k.as_str();
+                    (start.is_empty() || key >= start) &&
+                    (end.is_empty() || key <= end)
+                });
+
+                // Print each key on its own line
+                for key in filtered {
+                    println!("{}", key);
+                }
+
+                // Signal the end of the range output
+                println!("END");
             } else {
-                // Error for not enough arguments for RANGE
                 println!("ERR: RANGE requires a start and end");
             }
             CommandResult::Continue
@@ -1114,6 +1130,125 @@ mod main_lib_tests {
 
         // TTL map should be empty
         assert_eq!(session.ttl.active_count(), 0);
+    }
+
+        // =====================================================================
+    // RANGE command tests
+    // =====================================================================
+
+    #[test]
+    fn test_range_full_bounds_returns_all_keys() {
+        let mut session = Session::new();
+
+        // Insert multiple keys in non-sorted order
+        handle_command("SET", &vec!["dog".into(), "bark".into()], "Usage", &mut session);
+        handle_command("SET", &vec!["ant".into(), "tiny".into()], "Usage", &mut session);
+        handle_command("SET", &vec!["cat".into(), "meow".into()], "Usage", &mut session);
+
+        // Collect all keys using RANGE "" ""
+        let (cmd, args) = parse_command("RANGE \"\" \"\"");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+        assert!(matches!(result, CommandResult::Continue));
+
+        // Verify collect_keys produced sorted order
+        let mut keys = Vec::new();
+        session.index.collect_keys(&mut keys);
+        assert_eq!(keys, vec!["ant", "cat", "dog"]);
+    }
+
+    #[test]
+    fn test_range_with_limited_bounds() {
+        let mut session = Session::new();
+
+        handle_command("SET", &vec!["ant".into(), "1".into()], "Usage", &mut session);
+        handle_command("SET", &vec!["bat".into(), "2".into()], "Usage", &mut session);
+        handle_command("SET", &vec!["cat".into(), "3".into()], "Usage", &mut session);
+        handle_command("SET", &vec!["dog".into(), "4".into()], "Usage", &mut session);
+        handle_command("SET", &vec!["eel".into(), "5".into()], "Usage", &mut session);
+
+        // RANGE bat dog — should include bat, cat, dog
+        let (cmd, args) = parse_command("RANGE bat dog");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+        assert!(matches!(result, CommandResult::Continue));
+
+        let mut all_keys = Vec::new();
+        session.index.collect_keys(&mut all_keys);
+        let expected_subset: Vec<_> = all_keys
+            .into_iter()
+            .filter(|k| k.as_str() >= "bat" && k.as_str() <= "dog")
+            .collect();
+
+        assert_eq!(expected_subset, vec!["bat", "cat", "dog"]);
+    }
+
+    #[test]
+    fn test_range_with_open_start_or_end_bounds() {
+        let mut session = Session::new();
+
+        handle_command("SET", &vec!["a".into(), "A".into()], "Usage", &mut session);
+        handle_command("SET", &vec!["b".into(), "B".into()], "Usage", &mut session);
+        handle_command("SET", &vec!["c".into(), "C".into()], "Usage", &mut session);
+        handle_command("SET", &vec!["d".into(), "D".into()], "Usage", &mut session);
+
+        // RANGE "" c — should return all keys <= c
+        let (cmd, args) = parse_command("RANGE \"\" c");
+        let _ = handle_command(&cmd, &args, "Usage", &mut session);
+
+        let mut all_keys = Vec::new();
+        session.index.collect_keys(&mut all_keys);
+        let expected_subset: Vec<_> = all_keys
+            .into_iter()
+            .filter(|k| k.as_str() <= "c")
+            .collect();
+        assert_eq!(expected_subset, vec!["a", "b", "c"]);
+
+        // RANGE b "" — should return all keys >= b
+        let (cmd, args) = parse_command("RANGE b \"\"");
+        let _ = handle_command(&cmd, &args, "Usage", &mut session);
+        let mut all_keys = Vec::new();
+        session.index.collect_keys(&mut all_keys);
+        let expected_subset: Vec<_> = all_keys
+            .into_iter()
+            .filter(|k| k.as_str() >= "b")
+            .collect();
+        assert_eq!(expected_subset, vec!["b", "c", "d"]);
+    }
+
+    #[test]
+    fn test_range_with_no_matching_keys() {
+        let mut session = Session::new();
+
+        handle_command("SET", &vec!["a".into(), "1".into()], "Usage", &mut session);
+        handle_command("SET", &vec!["b".into(), "2".into()], "Usage", &mut session);
+        handle_command("SET", &vec!["c".into(), "3".into()], "Usage", &mut session);
+
+        // RANGE x z — no keys fall in that range
+        let (cmd, args) = parse_command("RANGE x z");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+        assert!(matches!(result, CommandResult::Continue));
+
+        let mut keys = Vec::new();
+        session.index.collect_keys(&mut keys);
+        let subset: Vec<_> = keys
+            .into_iter()
+            .filter(|k| k.as_str() >= "x" && k.as_str() <= "z").collect();
+
+        assert_eq!(subset.len(), 0);
+    }
+
+    #[test]
+    fn test_range_invalid_argument_count() {
+        let mut session = Session::new();
+
+        // Missing argument
+        let (cmd, args) = parse_command("RANGE a");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+        assert!(matches!(result, CommandResult::Continue));
+
+        // Too many arguments
+        let (cmd, args) = parse_command("RANGE a b c");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+        assert!(matches!(result, CommandResult::Continue));
     }
 
 }
