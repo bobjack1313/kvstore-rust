@@ -376,8 +376,14 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, session: &mut
             if !args.is_empty() {
                 println!("ERR: COMMIT does not take any arguments");
             } else {
-                // Error for added arguments
-                println!("ERROR: Too many arguments for COMMIT");
+                // Check if a trans exists
+                if session.in_transaction() {
+                    session.commit_transaction();
+                    println!("OK: Transaction committed");
+                } else {
+                    // No trans in play
+                    println!("ERR: No active transaction to commit");
+                }
             }
             CommandResult::Continue
         }
@@ -687,4 +693,61 @@ mod main_lib_tests {
         assert!(session.in_transaction());
     }
 
+    #[test]
+    fn test_commit_with_active_transaction() {
+        let mut session = Session::new();
+
+        // Start a transaction and perform a write
+        handle_command("BEGIN", &vec![], "Usage", &mut session);
+        assert!(session.in_transaction());
+
+        if let Some(tx) = &mut session.transaction {
+            tx.set("color".into(), "blue".into());
+        }
+
+        // Commit the transaction
+        let (cmd, args) = parse_command("COMMIT");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+
+        // Command should continue after commit
+        assert!(matches!(result, CommandResult::Continue));
+
+        // Verify that the transaction was cleared and the index updated
+        assert!(!session.in_transaction(), "Transaction should clear after COMMIT");
+        assert_eq!(session.index.search("color"), Some("blue"));
+    }
+
+    #[test]
+    fn test_commit_without_active_transaction() {
+        let mut session = Session::new();
+
+        // Attempt to commit when none is active
+        let (cmd, args) = parse_command("COMMIT");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+
+        // Command should not panic or exit
+        assert!(matches!(result, CommandResult::Continue));
+
+        // State should remain unchanged
+        assert!(!session.in_transaction());
+        assert!(session.index.search("color").is_none());
+    }
+
+    #[test]
+    fn test_commit_rejects_arguments() {
+        let mut session = Session::new();
+
+        // Begin a transaction to ensure valid context
+        handle_command("BEGIN", &vec![], "Usage", &mut session);
+        assert!(session.in_transaction());
+
+        // Attempt COMMIT with extra arguments
+        let (cmd, args) = parse_command("COMMIT now");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+
+        // Command should still continue but reject input
+        assert!(matches!(result, CommandResult::Continue));
+        // Transaction should remain active because commit failed
+        assert!(session.in_transaction());
+    }
 }
