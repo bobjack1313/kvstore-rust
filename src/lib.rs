@@ -408,14 +408,28 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, session: &mut
         // EXPIRE command — assign a TTL to a key
         "EXPIRE" => {
             if args.len() == 2 {
+                let key = &args[0];
+                let ms_str = &args[1];
 
-            // TODO: Implement command
+                // Parse milliseconds argument
+                match ms_str.parse::<i64>() {
+                    Ok(ms) if ms > 0 => {
+                        // Check if key exists in the index before applying TTL
+                        if session.index.search(key).is_some() {
+                            session.ttl.set_expiration(key, ms);
+                            println!("OK: Expiration set for key '{}'", key);
+                        } else {
+                            println!("ERR: Key '{}' does not exist", key);
+                        }
+                    }
+                    Ok(_) => println!("ERR: Expiration time must be greater than zero"),
+                    Err(_) => println!("ERR: Invalid millisecond value '{}'", ms_str),
+                }
             } else {
                 println!("ERR: EXPIRE requires a key and millisecond value");
             }
             CommandResult::Continue
         }
-
 
         "TTL" => {
             if args.len() >= 2 {
@@ -817,5 +831,105 @@ mod main_lib_tests {
         // Command continues but should not process abort
         assert!(matches!(result, CommandResult::Continue));
         assert!(session.in_transaction(), "Transaction should remain active when args are invalid");
+    }
+
+        #[test]
+    fn test_expire_sets_ttl_on_existing_key() {
+        let mut session = Session::new();
+
+        // Create key first
+        handle_command("SET", &vec!["dog".into(), "bark".into()], "Usage", &mut session);
+        assert_eq!(session.ttl.active_count(), 0);
+
+        // Apply EXPIRE command
+        let (cmd, args) = parse_command("EXPIRE dog 200");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+        assert!(matches!(result, CommandResult::Continue));
+
+        // TTL entry should now exist
+        assert_eq!(session.ttl.active_count(), 1);
+        assert!(session.ttl.has_entry("dog"));
+    }
+
+    #[test]
+    fn test_expire_rejects_missing_key() {
+        let mut session = Session::new();
+
+        // Try to expire a key that doesn’t exist
+        let (cmd, args) = parse_command("EXPIRE ghost 1000");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+        assert!(matches!(result, CommandResult::Continue));
+
+        // TTL manager should still be empty
+        assert_eq!(session.ttl.active_count(), 0);
+    }
+
+    #[test]
+    fn test_expire_rejects_non_numeric_value() {
+        let mut session = Session::new();
+
+        handle_command("SET", &vec!["temp".into(), "data".into()], "Usage", &mut session);
+
+        let (cmd, args) = parse_command("EXPIRE temp abc");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+        assert!(matches!(result, CommandResult::Continue));
+
+        // TTL manager should not be modified
+        assert_eq!(session.ttl.active_count(), 0);
+    }
+
+    #[test]
+    fn test_expire_rejects_zero_or_negative_duration() {
+        let mut session = Session::new();
+
+        handle_command("SET", &vec!["x".into(), "y".into()], "Usage", &mut session);
+
+        // Zero duration
+        let (cmd, args) = parse_command("EXPIRE x 0");
+        handle_command(&cmd, &args, "Usage", &mut session);
+        assert_eq!(session.ttl.active_count(), 0);
+
+        // Negative duration
+        let (cmd, args) = parse_command("EXPIRE x -100");
+        handle_command(&cmd, &args, "Usage", &mut session);
+        assert_eq!(session.ttl.active_count(), 0);
+    }
+
+    #[test]
+    fn test_expire_requires_two_arguments() {
+        let mut session = Session::new();
+
+        // Missing duration
+        let (cmd, args) = parse_command("EXPIRE dog");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+        assert!(matches!(result, CommandResult::Continue));
+
+        // Too many arguments
+        let (cmd, args) = parse_command("EXPIRE dog 1000 extra");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+        assert!(matches!(result, CommandResult::Continue));
+
+        // TTL manager remains empty in both cases
+        assert_eq!(session.ttl.active_count(), 0);
+    }
+
+    #[test]
+    fn test_expire_key_expires_after_delay() {
+        use std::thread::sleep;
+        use std::time::Duration;
+
+        let mut session = Session::new();
+
+        // Create key and set short TTL
+        handle_command("SET", &vec!["temp".into(), "123".into()], "Usage", &mut session);
+        handle_command("EXPIRE", &vec!["temp".into(), "50".into()], "Usage", &mut session);
+        assert!(session.ttl.has_entry("temp"));
+
+        // Wait until key should expire
+        sleep(Duration::from_millis(60));
+
+        // Verify TTL has expired (lazy cleanup)
+        assert!(session.ttl.is_expired("temp"));
+        assert_eq!(session.ttl.active_count(), 0);
     }
 }
