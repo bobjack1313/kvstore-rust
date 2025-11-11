@@ -354,12 +354,10 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, session: &mut
             CommandResult::Continue
         }
 
-        // BEGIN command
+        // BEGIN command — start a new transaction session
         "BEGIN" => {
-            // Could have many args
-            if args.len() > 1 {
-                // TODO: Implement command
-
+            if !args.is_empty() {
+                println!("ERR: BEGIN does not take any arguments");
             } else {
                 // Error for added arguments
                 println!("ERROR: Too many arguments for BEGIN");
@@ -367,11 +365,10 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, session: &mut
             CommandResult::Continue
         }
 
-        // COMMIT command
+        // COMMIT command — finalize an active transaction
         "COMMIT" => {
-            // Could have many args
-            if args.len() > 1 {
-                // TODO: Implement command
+            if !args.is_empty() {
+                println!("ERR: COMMIT does not take any arguments");
             } else {
                 // Error for added arguments
                 println!("ERROR: Too many arguments for COMMIT");
@@ -379,11 +376,10 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, session: &mut
             CommandResult::Continue
         }
 
-        // ABORT command
+        // ABORT command — discard any active transaction
         "ABORT" => {
-            // Could have many args
-            if args.len() > 1 {
-                // TODO: Implement command
+            if !args.is_empty() {
+                println!("ERR: ABORT does not take any arguments");
             } else {
                 // Error for added arguments
                 println!("ERROR: Too many arguments for ABORT");
@@ -391,16 +387,17 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, session: &mut
             CommandResult::Continue
         }
 
+        // EXPIRE command — assign a TTL to a key
         "EXPIRE" => {
             if args.len() == 2 {
 
             // TODO: Implement command
             } else {
-                // Error for not enough arguments for EXPIRE
-                println!("ERROR: EXPIRE requires a key and millisecond value");
+                println!("ERR: EXPIRE requires a key and millisecond value");
             }
             CommandResult::Continue
         }
+
 
         "TTL" => {
             if args.len() >= 2 {
@@ -573,4 +570,69 @@ mod main_lib_tests {
         let result2 = handle_command(&cmd2, &args2, "Usage", &mut session);
         assert!(matches!(result2, CommandResult::Continue));
     }
+
+    #[test]
+    fn test_mset_inserts_multiple_keys() {
+        let mut session = Session::new();
+
+        // Issue MSET command with multiple pairs
+        let (cmd, args) = parse_command("MSET dog bark cat meow cow moo");
+        assert_eq!(cmd, "MSET");
+        assert_eq!(args.len(), 6); // 3 key–value pairs
+
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+        assert!(matches!(result, CommandResult::Continue));
+
+        // Verify keys were inserted
+        assert_eq!(session.index.search("dog"), Some("bark"));
+        assert_eq!(session.index.search("cat"), Some("meow"));
+        assert_eq!(session.index.search("cow"), Some("moo"));
+    }
+
+    #[test]
+    fn test_mget_retrieves_multiple_keys() {
+        let mut session = Session::new();
+
+        // Prepopulate data
+        handle_command("SET", &vec!["dog".into(), "bark".into()], "Usage", &mut session);
+        handle_command("SET", &vec!["cat".into(), "meow".into()], "Usage", &mut session);
+        handle_command("SET", &vec!["cow".into(), "moo".into()], "Usage", &mut session);
+
+        // Retrieve with MGET
+        let (cmd, args) = parse_command("MGET dog cat horse");
+        assert_eq!(cmd, "MGET");
+        assert_eq!(args.len(), 3);
+
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+        assert!(matches!(result, CommandResult::Continue));
+
+        // Confirm correct state of index — horse should not exist
+        assert_eq!(session.index.search("dog"), Some("bark"));
+        assert_eq!(session.index.search("cat"), Some("meow"));
+        assert_eq!(session.index.search("horse"), None);
+    }
+
+    #[test]
+    fn test_mget_with_expired_key() {
+        use std::thread::sleep;
+        use std::time::Duration;
+
+        let mut session = Session::new();
+
+        // Insert two keys and expire one
+        handle_command("SET", &vec!["temp".into(), "123".into()], "Usage", &mut session);
+        handle_command("SET", &vec!["perm".into(), "456".into()], "Usage", &mut session);
+        handle_command("EXPIRE", &vec!["temp".into(), "50".into()], "Usage", &mut session);
+
+        sleep(Duration::from_millis(60)); // Allow TTL to expire
+
+        let (cmd, args) = parse_command("MGET temp perm");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+        assert!(matches!(result, CommandResult::Continue));
+
+        // Only "perm" should still exist
+        assert!(!session.ttl.has_entry("temp"), "Expired key should have been removed");
+        assert_eq!(session.index.search("perm"), Some("456"));
+    }
+
 }

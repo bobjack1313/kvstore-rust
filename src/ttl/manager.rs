@@ -335,4 +335,12 @@ impl TTLManager {
         self.expirations.retain(|_, &mut exp| exp > now);
     }
 
+
+    /// Returns `true` if a TTL entry currently exists for the given key.
+    ///
+    /// This does not trigger expiration checks; it simply reports
+    /// whether the key is tracked in the internal expiration map.
+    pub fn has_entry(&self, key: &str) -> bool {
+        self.expirations.contains_key(key)
+    }
 }
