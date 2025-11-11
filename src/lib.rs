@@ -359,8 +359,14 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, session: &mut
             if !args.is_empty() {
                 println!("ERR: BEGIN does not take any arguments");
             } else {
-                // Error for added arguments
-                println!("ERROR: Too many arguments for BEGIN");
+                // Check if we have one
+                if session.in_transaction() {
+                    println!("ERR: Transaction already active");
+                } else {
+                    // Create a new trans
+                    session.begin_transaction();
+                    println!("OK: Transaction started");
+                }
             }
             CommandResult::Continue
         }
@@ -633,6 +639,52 @@ mod main_lib_tests {
         // Only "perm" should still exist
         assert!(!session.ttl.has_entry("temp"), "Expired key should have been removed");
         assert_eq!(session.index.search("perm"), Some("456"));
+    }
+
+    #[test]
+    fn test_begin_starts_new_transaction() {
+        let mut session = Session::new();
+
+        // Ensure no transaction at start
+        assert!(!session.in_transaction());
+
+        // Execute BEGIN command
+        let (cmd, args) = parse_command("BEGIN");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+
+        // The REPL should continue after BEGIN
+        assert!(matches!(result, CommandResult::Continue));
+
+        // Verify session now has an active transaction
+        assert!(session.in_transaction(), "BEGIN should create a transaction");
+    }
+
+    #[test]
+    fn test_begin_rejects_arguments() {
+        let mut session = Session::new();
+
+        // BEGIN should not take arguments
+        let (cmd, args) = parse_command("BEGIN extra_arg");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+
+        // It should not start a transaction
+        assert!(matches!(result, CommandResult::Continue));
+        assert!(!session.in_transaction(), "BEGIN with arguments should be ignored");
+    }
+
+    #[test]
+    fn test_begin_prevents_nested_transactions() {
+        let mut session = Session::new();
+
+        // Start the first transaction
+        handle_command("BEGIN", &vec![], "Usage", &mut session);
+        assert!(session.in_transaction());
+
+        // Try to start another one — should be ignored or error
+        handle_command("BEGIN", &vec![], "Usage", &mut session);
+
+        // Still only one transaction should exist
+        assert!(session.in_transaction());
     }
 
 }
