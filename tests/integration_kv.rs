@@ -193,3 +193,30 @@ fn test_ttl_does_not_persist_across_restart() {
     // TTLs vanish on restart, but value remains
     assert_eq!(tree.search("temp"), Some("123"));
 }
+
+#[test]
+fn test_transaction_commit_persists() {
+    let file = "integration_commit.db";
+    setup_file(file);
+
+    // Simulate a user session that begins, sets, commits
+    append_write(file, "BEGIN").unwrap();
+    append_write(file, "SET bird tweet").unwrap();
+    append_write(file, "COMMIT").unwrap();
+
+    // Rebuild index
+    let records = replay_log(file).unwrap();
+    let mut tree = BTreeIndex::new(2);
+    for line in records {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        match parts.as_slice() {
+            ["SET", key, val] => tree.insert((*key).into(), (*val).into()),
+            ["DEL", key] => { tree.delete(key); },
+            _ => {} // BEGIN/COMMIT lines safely ignored
+        }
+    }
+
+    assert_eq!(tree.search("bird"), Some("tweet"));
+}
+
+
