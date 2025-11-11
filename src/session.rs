@@ -88,7 +88,6 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BTreeIndex, TTLManager, Transaction};
 
     // Basic Session Creation
     #[test]

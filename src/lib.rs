@@ -53,8 +53,6 @@ pub mod session;
 pub use session::Session;
 
 use std::io::{self, BufRead};
-use std::time::Instant;
-use std::collections::HashMap;
 
 /// Result of handling a single user command.
 ///
@@ -535,7 +533,6 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, session: &mut
 
 #[cfg(test)]
 mod main_lib_tests {
-    use crate::BTreeIndex;
     use super::*;
 
     #[test]

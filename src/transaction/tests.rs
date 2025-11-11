@@ -21,7 +21,7 @@
 mod transaction_tests {
 
     use super::super::transaction::Transaction;
-    use crate::{BTreeIndex, TTLManager};
+    use crate::BTreeIndex;
 
     // -------------------------------------------------------------
     // Basic construction and initial state

@@ -219,4 +219,51 @@ fn test_transaction_commit_persists() {
     assert_eq!(tree.search("bird"), Some("tweet"));
 }
 
+#[test]
+fn test_range_persists_ordered_keys() {
+    let file = "integration_range.db";
+    setup_file(file);
+
+    append_write(file, "SET cat meow").unwrap();
+    append_write(file, "SET ant tiny").unwrap();
+    append_write(file, "SET dog bark").unwrap();
+
+    let records = replay_log(file).unwrap();
+    let mut tree = BTreeIndex::new(2);
+    for line in records {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() == 3 && parts[0] == "SET" {
+            tree.insert(parts[1].into(), parts[2].into());
+        }
+    }
+
+    let mut keys = Vec::new();
+    tree.collect_keys(&mut keys);
+    assert_eq!(keys, vec!["ant", "cat", "dog"]);
+}
+
+#[test]
+fn test_delete_then_set_sequence_persists_final_value() {
+    let file = "integration_delset.db";
+    setup_file(file);
+
+    append_write(file, "SET frog ribbit").unwrap();
+    append_write(file, "DEL frog").unwrap();
+    append_write(file, "SET frog croak").unwrap();
+
+    let records = replay_log(file).unwrap();
+    let mut tree = BTreeIndex::new(2);
+    for line in records {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        match parts.as_slice() {
+            ["SET", key, val] => tree.insert((*key).into(), (*val).into()),
+            ["DEL", key] => { tree.delete(key); },
+            _ => {}
+        }
+    }
+
+    // Final state: frog should exist, last value kept
+    assert_eq!(tree.search("frog"), Some("croak"));
+}
+
 

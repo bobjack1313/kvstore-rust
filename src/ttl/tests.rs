@@ -19,7 +19,6 @@
 // =====================================================================
 #[cfg(test)]
 mod ttl_manager_tests {
-    use super::*;
     use crate::TTLManager;
     use std::thread::sleep;
     use std::time::Duration;
