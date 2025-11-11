@@ -46,10 +46,15 @@ pub use index::{BTreeNode, BTreeIndex};
 pub mod ttl;
 pub use ttl::TTLManager;
 
+pub mod transaction;
+pub use transaction::Transaction;
+
+pub mod session;
+pub use session::Session;
+
 use std::io::{self, BufRead};
 use std::time::Instant;
 use std::collections::HashMap;
-
 
 /// Result of handling a single user command.
 ///
@@ -129,28 +134,26 @@ pub fn load_data(index: &mut BTreeIndex) {
 }
 
 
-/// Read, evaluate, and print loop to handle command line instructions.
+/// Read–Evaluate–Print Loop (REPL) to handle interactive command input.
 ///
-/// Continuously reads commands from standard input, executes them against
-/// the provided `BTreeIndex`, and prints results back to the user.
-///
-/// # Supported Commands
-/// - `SET <key> <value>` — Insert or update a key-value pair.
-/// - `GET <key>` — Retrieve the value for a key.
-/// - `EXIT` — Quit the REPL.
+/// Continuously reads user commands from standard input, executes them
+/// against the current [`Session`] (which includes the B-tree index,
+/// TTL manager, and optional transaction state), and prints responses
+/// back to standard output.
 ///
 /// # Arguments
-///
-/// * `index` - A mutable reference to the `BTreeIndex` that stores key–value data.
+/// * `session` - A mutable reference to the active [`Session`],
+///   which manages the key–value index, TTL expirations, and
+///   transaction state.
 ///
 /// # Example
 /// ```no_run
-/// use kvstore::{BTreeIndex, repl_loop};
+/// use kvstore::{Session, repl_loop};
 ///
-/// let mut index = BTreeIndex::new(2);
-/// repl_loop(&mut index); // <- waits for user input interactively
-///
-pub fn repl_loop(index: &mut BTreeIndex) {
+/// let mut session = Session::new();
+/// repl_loop(&mut session); // <- waits for user input interactively
+/// ```
+pub fn repl_loop(session: &mut Session) {
     let stdin = io::stdin();
     let proper_syntax = "Syntax Usage: GET <key>, SET <key> <value>, EXIT";
 
@@ -161,7 +164,7 @@ pub fn repl_loop(index: &mut BTreeIndex) {
         let (cmd, args) = parse_command(&full_command);
 
         // Process command and arguments
-        match handle_command(&cmd, &args, proper_syntax, index) {
+        match handle_command(&cmd, &args, proper_syntax, session) {
             CommandResult::Exit => break,
             CommandResult::Continue => (),
         }
@@ -197,7 +200,7 @@ fn parse_command(line: &str) -> (String, Vec<String>) {
 /// - `CommandResult::Exit` if the user requested termination.
 ///
 /// The `proper_syntax` argument is displayed in error messages to guide the user.
-fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, index: &mut BTreeIndex) -> CommandResult {
+fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, session: &mut Session) -> CommandResult {
     // Watch - cmd is ref here
     match cmd.as_ref() {
 
@@ -205,7 +208,7 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, index: &mut B
         "GET" => {
 
             if let Some(key) = args.get(0) {
-                match index.search(key) {
+                match session.index.search(key) {
                     Some(value) => println!("{}", value),
                     None => println!("NULL"),
                 }
@@ -229,7 +232,7 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, index: &mut B
 
                } else {
                     // Success log write - now store in mem
-                    index.insert(args[0].clone(), args[1].clone());
+                    session.index.insert(args[0].clone(), args[1].clone());
                     //println!("Setting key: {} - value: {}", args[0], args[1]);
                 }
 
@@ -251,10 +254,10 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, index: &mut B
             } else {
                 // 1 Arg is correct
                 if let Some(key) = args.get(0) {
-                    match index.search(key) {
+                    match session.index.search(key) {
                         Some(_) => {
                             // Sucessful delete
-                            index.delete(key);
+                            session.index.delete(key);
                             println!("1");
                         }
                         // Key doesn't exist
@@ -278,7 +281,7 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, index: &mut B
             } else {
                 // 1 Arg is correct
                 if let Some(key) = args.get(0) {
-                    match index.search(key) {
+                    match session.index.search(key) {
                         // Key exists
                         Some(_) => {
                             // TODO: Implement command
@@ -301,36 +304,52 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, index: &mut B
 
         // MSET command format: MSET <k1> <v1> [<k2> <v2> ...]
         "MSET" => {
-            // Could have many args
-            if args.len() >= 2 {
-                // TODO: Implement command
+            // Must be even number of args: pairs of key/value
+            if args.len() < 2 || args.len() % 2 != 0 {
+                println!("ERR: MSET requires key/value pairs (even number of arguments)");
+                return CommandResult::Continue;
+            }
 
-                    // Success log write - now store in mem
-                 //   index.insert(args[0].clone(), args[1].clone());
-                    //println!("Setting key: {} - value: {}", args[0], args[1]);
+            // Build a single log line for persistence
+            let mut log_entry = String::from(cmd);
+            for arg in args {
+                log_entry.push(' ');
+                log_entry.push_str(arg);
+            }
 
+            // Append to log file first
+            if let Err(e) = append_write(storage::DATA_FILE, &log_entry) {
+                eprintln!("ERR: failed to write MSET batch to log file: {}", e);
             } else {
-                // Error for not enough arguments for MSET
-                println!("ERROR: MSET requires a key and multiple values");
+                // Apply all kv pairs to memory
+                for pair in args.chunks(2) {
+                    let key = pair[0].clone();
+                    let value = pair[1].clone();
+                    session.index.insert(key, value);
+                }
+                println!("OK");
             }
             CommandResult::Continue
         }
 
         // MGET command <k1> [<k2> ...]
         "MGET" => {
-            // Could have many args
-            if args.len() >= 2 {
-                // TODO: Implement command
+            if args.is_empty() {
+                println!("ERR MGET requires at least one key");
+                return CommandResult::Continue;
+            }
 
-                    // Success log write - now store in mem
+            for key in args {
+                // Check TTL first (treat expired as absent)
+                if session.ttl.is_expired(key) {
+                    println!("nil");
+                    continue;
+                }
 
-            //        index.insert(args[0].clone(), args[1].clone());
-                    //println!("Setting key: {} - value: {}", args[0], args[1]);
-
-
-            } else {
-                // Error for not enough arguments for MGET
-                println!("ERROR: MGET requires a key and multiple values");
+                match session.index.search(key) {
+                    Some(value) => println!("{}", value),
+                    None => println!("nil"),
+                }
             }
             CommandResult::Continue
         }
@@ -465,8 +484,8 @@ mod main_lib_tests {
     #[test]
     fn test_exit_command() {
         let (cmd, args) = parse_command("EXIT");
-        let mut tree = BTreeIndex::new(2);
-        let result = handle_command(&cmd, &args, "Usage", &mut tree);
+        let mut session = Session::new();
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
         assert!(matches!(result, CommandResult::Exit));
     }
 
@@ -493,8 +512,8 @@ mod main_lib_tests {
         assert_eq!(cmd, "FLY");
         assert_eq!(args[0], "away");
 
-        let mut tree = BTreeIndex::new(2);
-        let result = handle_command(&cmd, &args, "Usage", &mut tree);
+        let mut session = Session::new();
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
         // Should not exit on bad command
         assert!(matches!(result, CommandResult::Continue));
     }
@@ -504,8 +523,8 @@ mod main_lib_tests {
         let (cmd, args) = parse_command("GET");
         assert_eq!(cmd, "GET");
         assert!(args.is_empty());
-        let mut tree = BTreeIndex::new(2);
-        let result = handle_command(&cmd, &args, "Usage", &mut tree);
+        let mut session = Session::new();
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
         assert!(matches!(result, CommandResult::Continue));
     }
 
@@ -514,8 +533,8 @@ mod main_lib_tests {
         let (cmd, args) = parse_command("SET justonekey");
         assert_eq!(cmd, "SET");
         assert_eq!(args.len(), 1);
-        let mut tree = BTreeIndex::new(2);
-        let result = handle_command(&cmd, &args, "Usage", &mut tree);
+        let mut session = Session::new();
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
         assert!(matches!(result, CommandResult::Continue));
     }
 
@@ -535,23 +554,23 @@ mod main_lib_tests {
 
     #[test]
     fn test_del_command() {
-        let mut tree = BTreeIndex::new(2);
+        let mut session = Session::new();
 
         // First, insert a key to delete
-        handle_command("SET", &vec!["mykey".to_string(), "myvalue".to_string()], "Usage", &mut tree);
+        handle_command("SET", &vec!["mykey".to_string(), "myvalue".to_string()], "Usage", &mut session);
 
         // Delete existing key (expect success = 1)
         let (cmd, args) = parse_command("DEL mykey");
         assert_eq!(cmd, "DEL");
         assert_eq!(args.len(), 1);
-        let result = handle_command(&cmd, &args, "Usage", &mut tree);
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
         assert!(matches!(result, CommandResult::Continue));
 
         // Delete non-existing key (expect fail = 0)
         let (cmd2, args2) = parse_command("DEL notfound");
         assert_eq!(cmd2, "DEL");
         assert_eq!(args2.len(), 1);
-        let result2 = handle_command(&cmd2, &args2, "Usage", &mut tree);
+        let result2 = handle_command(&cmd2, &args2, "Usage", &mut session);
         assert!(matches!(result2, CommandResult::Continue));
     }
 }
