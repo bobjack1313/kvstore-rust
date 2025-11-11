@@ -393,8 +393,14 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, session: &mut
             if !args.is_empty() {
                 println!("ERR: ABORT does not take any arguments");
             } else {
-                // Error for added arguments
-                println!("ERROR: Too many arguments for ABORT");
+                // Check if a trans exists
+                if session.in_transaction() {
+                    session.abort_transaction();
+                    println!("OK: Transaction aborted");
+                } else {
+                    // No trans in play
+                    println!("ERR: No active transaction to abort");
+                }
             }
             CommandResult::Continue
         }
@@ -749,5 +755,67 @@ mod main_lib_tests {
         assert!(matches!(result, CommandResult::Continue));
         // Transaction should remain active because commit failed
         assert!(session.in_transaction());
+    }
+
+    #[test]
+    fn test_abort_discards_active_transaction() {
+        let mut session = Session::new();
+
+        // Begin a transaction and add some data
+        handle_command("BEGIN", &vec![], "Usage", &mut session);
+        assert!(session.in_transaction());
+
+        if let Some(tx) = &mut session.transaction {
+            tx.set("temp".into(), "data".into());
+            assert_eq!(tx.pending_count(), 1);
+        }
+
+        // Abort the transaction
+        let (cmd, args) = parse_command("ABORT");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+
+        // Command should continue
+        assert!(matches!(result, CommandResult::Continue));
+
+        // Transaction should be cleared
+        assert!(!session.in_transaction(), "Transaction should be cleared after ABORT");
+
+        // Index should not have been modified
+        assert!(session.index.search("temp").is_none());
+    }
+
+    #[test]
+    fn test_abort_without_active_transaction() {
+        let mut session = Session::new();
+
+        // Ensure no active transaction
+        assert!(!session.in_transaction());
+
+        // Try to abort anyway
+        let (cmd, args) = parse_command("ABORT");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+
+        assert!(matches!(result, CommandResult::Continue));
+
+        // State should remain unchanged
+        assert!(!session.in_transaction());
+        assert_eq!(session.index.search("ghost"), None);
+    }
+
+    #[test]
+    fn test_abort_rejects_arguments() {
+        let mut session = Session::new();
+
+        // Begin a transaction for valid context
+        handle_command("BEGIN", &vec![], "Usage", &mut session);
+        assert!(session.in_transaction());
+
+        // Try to abort with extra argument
+        let (cmd, args) = parse_command("ABORT now");
+        let result = handle_command(&cmd, &args, "Usage", &mut session);
+
+        // Command continues but should not process abort
+        assert!(matches!(result, CommandResult::Continue));
+        assert!(session.in_transaction(), "Transaction should remain active when args are invalid");
     }
 }
