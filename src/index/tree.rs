@@ -133,6 +133,13 @@ impl BTreeIndex {
     /// assert_eq!(index.search("dog"), Some("woof"));
     /// ```
     pub fn insert(&mut self, key: String, value: String) {
+        // Before we mutate anything, try to find and overwrite an existing key directly.
+        if let Some(existing) = self.search_mut(&key) {
+            *existing = value;
+            // Short-circuit to updated the value
+            return;
+        }
+
         let t = self.t;
 
         if self.root.kv_pairs.len() == 2 * t - 1 {
@@ -261,6 +268,98 @@ impl BTreeIndex {
     }
 
 
+    /// Dumps tree state information for degugging in tests.
+    pub fn debug_dump(&self) {
+        fn dump(node: &BTreeNode, depth: usize) {
+            let indent = "  ".repeat(depth);
+            for (k, v) in &node.kv_pairs {
+                println!("{}KEY={} VAL={}", indent, k, v);
+            }
+            for child in &node.children {
+                dump(child, depth + 1);
+            }
+        }
+        dump(&self.root, 0);
+    }
+
+
+    /// Mutable search for a key in the B-tree.
+    ///
+    /// Traverses the tree recursively to locate the target key and returns
+    /// a mutable reference to its associated value, allowing in-place updates.
+    ///
+    /// # Arguments
+    /// * `key` - The key to locate in the index.
+    ///
+    /// # Returns
+    /// * `Some(&mut String)` if the key exists, providing mutable access
+    ///   to the value for modification.
+    /// * `None` if the key is not found anywhere in the tree.
+    ///
+    /// # Notes
+    /// - This function is primarily used by [`insert()`] to overwrite
+    ///   existing keys before performing a new insertion.
+    /// - Runtime complexity is **O(log n)** in a balanced B-tree.
+    ///
+    /// # Example
+    /// ```
+    /// use kvstore::BTreeIndex;
+    /// let mut tree = BTreeIndex::new(2);
+    /// tree.insert("dog".into(), "bark".into());
+    ///
+    /// if let Some(val) = tree.search_mut("dog") {
+    ///     *val = "woof".into();
+    /// }
+    ///
+    /// assert_eq!(tree.search("dog"), Some("woof"));
+    /// ```
+    pub fn search_mut(&mut self, key: &str) -> Option<&mut String> {
+        fn search_node<'a>(node: &'a mut BTreeNode, key: &str) -> Option<&'a mut String> {
+            let idx = node.lower_bound(key);
+
+            if idx < node.kv_pairs.len() && node.kv_pairs[idx].0 == key {
+                return Some(&mut node.kv_pairs[idx].1);
+            }
+
+            if node.is_leaf {
+                None
+            } else {
+                search_node(&mut node.children[idx], key)
+            }
+        }
+
+        search_node(&mut self.root, key)
+    }
+
+
+    /// Needed to eliminate tree insert duplications in recurcive function.
+    pub fn deduplicate(&mut self) {
+        use std::collections::BTreeMap;
+        let mut unique = BTreeMap::new();
+
+        // Collect all (key, value) pairs from the tree (depth-first)
+        fn collect(node: &BTreeNode, map: &mut BTreeMap<String, String>) {
+            for (k, v) in &node.kv_pairs {
+                // Last write wins
+                map.insert(k.clone(), v.clone());
+            }
+            for child in &node.children {
+                collect(child, map);
+            }
+        }
+
+        collect(&self.root, &mut unique);
+
+        // Clear the entire tree structure
+        self.root = Box::new(BTreeNode::new(true));
+
+        // Reinsert sorted unique pairs to rebuild clean structure
+        for (k, v) in unique {
+            self.insert(k, v);
+        }
+    }
+
+
     // =========================
     // Insertion helpers
     // =========================
@@ -295,28 +394,46 @@ impl BTreeIndex {
     /// Will call out if there is a violation like attempting to split a
     /// non-full child. Should not happend if properly working.
     fn insert_internal(node: &mut BTreeNode, t: usize, key: String, value: String) {
+        // Find first position where key could go based on ordering
         let mut idx = node.lower_bound(&key);
 
-        // Base case - leaf insert
+        // Case 1: Leaf node
         if node.is_leaf {
-            // Overwrite if key exists (last write wins)
+            // If exact key found at idx, overwrite
             if idx < node.kv_pairs.len() && node.kv_pairs[idx].0 == key {
                 node.kv_pairs[idx].1 = value;
-            } else {
-                node.kv_pairs.insert(idx, (key, value));
+                return;
             }
+
+            // Defensive: if lower_bound implementation returned the slot
+            // *after* an equal key, also treat that as overwrite
+            if idx > 0 && node.kv_pairs[idx - 1].0 == key {
+                node.kv_pairs[idx - 1].1 = value;
+                return;
+            }
+
+            // Otherwise, insert new key at computed position
+            node.kv_pairs.insert(idx, (key, value));
             return;
         }
-        // If key exists in internal node - overwrite value and stop
+
+        // Case 2: Internal node - check for existing key in this node
         if idx < node.kv_pairs.len() && node.kv_pairs[idx].0 == key {
             node.kv_pairs[idx].1 = value;
             return;
         }
-        // Recurse case (inside node): Check index child is not full
+
+        if idx > 0 && node.kv_pairs[idx - 1].0 == key {
+            node.kv_pairs[idx - 1].1 = value;
+            return;
+        }
+
+        // Case 3: Descend into child; split if needed
         if node.children[idx].kv_pairs.len() == 2 * t - 1 {
+            // Child full: split it
             Self::split_child(node, t, idx);
 
-            // After split decide which child to descend into
+            // After split, decide which side to follow or overwrite pivot
             if key > node.kv_pairs[idx].0 {
                 idx += 1;
             } else if key == node.kv_pairs[idx].0 {
@@ -324,7 +441,8 @@ impl BTreeIndex {
                 return;
             }
         }
-        // Recurse into the appropriate child
+
+        // Recurse into selected child
         Self::insert_internal(&mut node.children[idx], t, key, value);
     }
 

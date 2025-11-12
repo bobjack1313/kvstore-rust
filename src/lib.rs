@@ -129,6 +129,7 @@ pub fn load_data(index: &mut BTreeIndex) {
             storage::DATA_FILE
         );
     }
+    index.deduplicate();
 }
 
 
@@ -319,11 +320,19 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, session: &mut
             if let Err(e) = append_write(storage::DATA_FILE, &log_entry) {
                 eprintln!("ERR: failed to write MSET batch to log file: {}", e);
             } else {
+
+                use std::collections::HashSet;
                 // Apply all kv pairs to memory
+                let mut seen = HashSet::new();
                 for pair in args.chunks(2) {
-                    let key = pair[0].clone();
-                    let value = pair[1].clone();
-                    session.index.insert(key, value);
+                    if let [key, val] = pair {
+                        if seen.insert(key) {
+                            session.index.insert(key.to_string(), val.to_string());
+                        } else {
+                            // Overwrite existing in same MSET command
+                            session.index.insert(key.to_string(), val.to_string());
+                        }
+                    }
                 }
                 println!("OK");
             }

@@ -220,6 +220,48 @@ fn test_transaction_commit_persists() {
 }
 
 #[test]
+fn test_mset_replay_correctly_restores_last_values() {
+    let file = "integration_mset.db";
+    // Force delete any stale file
+    std::fs::remove_file(file).ok();
+    setup_file(file);
+
+    append_write(file, "MSET a 1 b 2 c 3").unwrap();
+    append_write(file, "MSET b 9 c 8").unwrap();
+
+    let records = replay_log(file).unwrap();
+
+    println!("==== FILE CONTENTS ====");
+    println!("{}", std::fs::read_to_string(file).unwrap());
+    println!("==== REPLAYED RECORDS ====");
+    println!("{:?}", records);
+
+    let mut tree = BTreeIndex::new(2);
+    for line in records.iter() {
+        println!("REPLAYING: {}", line);
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts[0].eq_ignore_ascii_case("MSET") {
+            for chunk in parts[1..].chunks(2) {
+                if chunk.len() == 2 {
+                    println!(" -> inserting key bytes: {:?} = {}", chunk[0].as_bytes(), chunk[1]);
+                    let key = chunk[0].trim().to_lowercase();
+                    let value = chunk[1].trim().to_string();
+                    tree.insert(key, value);
+                }
+            }
+        }
+    }
+    // Used for debugging dups in inserts
+    //tree.deduplicate();
+    println!("=== BTree structure after replay ===");
+    tree.debug_dump();
+
+    assert_eq!(tree.search("a"), Some("1"));
+    assert_eq!(tree.search("b"), Some("9"));
+    assert_eq!(tree.search("c"), Some("8"));
+}
+
+#[test]
 fn test_range_persists_ordered_keys() {
     let file = "integration_range.db";
     setup_file(file);
