@@ -38,7 +38,7 @@
 //     `EXIT`                -> Terminate the program
 // =====================================================================
 mod storage;
-pub use storage::{append_write, replay_log, DATA_FILE};
+pub use storage::{append_write, replay_log };
 
 pub mod index;
 pub use index::{BTreeNode, BTreeIndex};
@@ -108,25 +108,28 @@ pub enum CommandResult {
 ///
 /// assert_eq!(index.search("dog"), Some("bark"));
 /// ```
-pub fn load_data(index: &mut BTreeIndex) {
+pub fn load_data(session: &mut Session, _file: &str) {
+    let records = storage::replay_log(_file).unwrap_or_default();
     // Clear stale keys before replaying
-    index.clear();
+    session.index.clear();
+    session.ttl.clear();
 
     // Read persisted SET commands
-    let Ok(records) = storage::replay_log(storage::DATA_FILE) else {
-        return; // silent fail required by Gradebot
-    };
-
     for line in records {
         let parts: Vec<&str> = line.split_whitespace().collect();
         if parts.len() == 3 && parts[0] == "SET" {
-            index.insert(parts[1].to_string(), parts[2].to_string());
+            let key = parts[1].to_string();
+            let val = parts[2].to_string();
+
+            session.index.insert(key.clone(), val);
+            // SET clears any TTL
+            session.ttl.clear_expiration(&key);
         }
         // Ignore ALL other commands (MSET, EXPIRE, DEL, etc.)
     }
 
     // Remove duplicates, last-write-wins
-    index.deduplicate();
+    session.index.deduplicate();
 }
 
 
@@ -302,7 +305,7 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, session: &mut
             } else {
                 session.index.insert(key.clone(), value.clone());
                 let line = format!("SET {} {}", key, value);
-                let _ = storage::append_write(storage::DATA_FILE, &line);
+                let _ = storage::append_write(&storage::get_data_file(), &line);
             }
 
             println!("OK");
@@ -377,7 +380,7 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, session: &mut
 
                     // Persist as a SET line so load_data understands it
                     let line = format!("SET {} {}", k, v);
-                    let _ = storage::append_write(storage::DATA_FILE, &line);
+                    let _ = storage::append_write(&storage::get_data_file(), &line);
                 }
             }
 

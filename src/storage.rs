@@ -17,12 +17,15 @@
 // 2) Data must remain consistent after restarting the program.
 // 3) On startup, replay the log to rebuild the in-memory index.
 // ============================================================
+#![allow(dead_code)]
 use std::fs::{OpenOptions, File};
 use std::io::{self, Write, BufRead, BufReader};
 
-/// File name from assignment requirements for persistent storage.
-pub const DATA_FILE: &str = "data.db";
 
+/// Uses consistent db file for persistence.
+pub fn get_data_file() -> String {
+    std::env::var("KVSTORE_DATA_FILE").unwrap_or_else(|_| "data.db".to_string())
+}
 
 /// Append a single command to the persistent log file.
 ///
@@ -91,10 +94,10 @@ pub fn append_write(filename: &str, input_data: &str) -> io::Result<()> {
 /// let records = replay_log(file).unwrap();
 /// assert_eq!(records, vec!["SET dog bark", "SET cat meow"]);
 /// ```
-pub fn replay_log(filename: &str) -> io::Result<Vec<String>> {
-    let file = File::open(filename);
+pub fn replay_log(_filename: &str) -> io::Result<Vec<String>> {
+    let filename = get_data_file();
+    let file = File::open(&filename);
 
-    // Error for missing file
     if let Err(e) = &file {
         if e.kind() == io::ErrorKind::NotFound {
             return Ok(vec![]);
@@ -105,12 +108,12 @@ pub fn replay_log(filename: &str) -> io::Result<Vec<String>> {
     let reader = BufReader::new(file.unwrap());
     let mut out = Vec::new();
 
-    // Valid opening, pushing records
     for line in reader.lines() {
-        let Ok(l) = line else { continue };
-        let trimmed = l.trim();
-        if !trimmed.is_empty() {
-            out.push(trimmed.to_string());
+        if let Ok(l) = line {
+            let trimmed = l.trim();
+            if !trimmed.is_empty() {
+                out.push(trimmed.to_string());
+            }
         }
     }
 

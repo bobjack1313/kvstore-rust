@@ -22,21 +22,24 @@
 // =====================================================================
 use std::fs::OpenOptions;
 use kvstore::{load_data, repl_loop, Session};
+mod storage;
 
 /// Entry point for the key-value store assignment.
 fn main() {
 
     // Initialize a new in-memory session (includes BTree index and TTL manager)
     let mut session = Session::new();
+    let db_file = storage::get_data_file();
 
-    // Ensure the data file exists for append-only persistence
+    // Check if file exists without truncating or modifying it
     let _ = OpenOptions::new()
         .create(true)
-        .append(true)
-        .open("data.db");
+        .read(true)
+        .write(true)
+        .open(&db_file);
 
     // Replay existing records into the in-memory index
-    load_data(&mut session.index);
+    load_data(&mut session, &db_file);
 
     // Hand off to the main REPL loop, which handles commands
     repl_loop(&mut session);

@@ -19,7 +19,7 @@
 // Each client session corresponds to a single REPL or Gradebot run,
 // ensuring isolated transaction and TTL states.
 // =====================================================================
-
+use crate::storage;
 use crate::{BTreeIndex, TTLManager, Transaction};
 
 /// Represents a single in-memory database session.
@@ -99,16 +99,23 @@ impl Session {
     /// assert_eq!(session.index.get("y"), Some("20".to_string()));
     /// ```
     pub fn commit_transaction(&mut self) {
-        if let Some(tx) = &mut self.transaction {
-            // Apply to index AND log as SETs
-            for (k, v) in tx.pending.iter() {
-                self.index.insert(k.clone(), v.clone());
-                let _ = crate::storage::append_write(k, v);
+        if let Some(tx) = self.transaction.take() {
+
+            // Apply all key/value mutations to the main index.
+            for (key, val) in tx.pending.iter() {
+                self.index.insert(key.clone(), val.clone());
+                 // Persist this change to disk (Gradebot requires this!)
+                let line = format!("SET {} {}", key, val);
+                let _ = storage::append_write(&storage::get_data_file(), &line);
             }
-            tx.clear();
+
+            // Transaction ends
+            println!("OK");
+        } else {
+            println!("ERR no active transaction");
         }
-        self.transaction = None;
     }
+
 
     /// Aborts (clears) an active transaction, discarding pending changes.
     pub fn abort_transaction(&mut self) {

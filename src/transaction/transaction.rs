@@ -64,7 +64,7 @@ impl Transaction {
 
             // Also append to disk log as a SET command
             let line = format!("SET {} {}", k, v);
-            let _ = storage::append_write(storage::DATA_FILE, &line);
+            let _ = storage::append_write(&storage::get_data_file(), &line);
         }
 
         // Clear transaction buffers
