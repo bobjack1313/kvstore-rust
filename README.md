@@ -1,50 +1,76 @@
 # KVStore (Rust)
 
 ## Overview
-This project is a simple key-value store written in **Rust**. This is part of a midterm/final 
-project for CSCE 5350 Fundamentals of Database Systems at UNT.  
+This project implements a persistent, append-only key–value store in Rust.  
+It serves as the final implementation for **CSCE 5350 — Fundamentals of Database Systems** at the University of North Texas.
 
-The database store accepts commands line input and prints rsults to standard output. It is designed to 
-interact with a grading program (Gradebot) located at https://github.com/jh125486/CSCE5350_gradebot/releases  
+The store reads commands from standard input and is designed to operate under the official course Gradebot evaluator.  
+Persistence is handled via an append-only log (`data.db`), while an in-memory **B-Tree index** is rebuilt on startup following a “last write wins” model.
 
-The implementation follows an append-only storage model, with an in-memory index to enforce "last write wins" semantics. The long-term goal is to evolve this into a B+Tree-based system in later project phases.  
+Part 2 adds transaction logic, multi-key operations, TTL support, lazy expiration, and range queries.
 
 ---
 
-## Current Features (Part 1 Completed)
-- **Command-line interface (CLI)** with support for:
-  - `SET <key> <value>` - Store a key-value pair (acknowledges with `OK` and the entry)
-  - `GET <key>` - Retrieve a value (currently placeholder, prints entered key and `NULL`)
-  - `EXIT` - Terminate the program
-- **Input parsing**:
-  - Commands are normalized to uppercase (`set` / `Set` also work)
-  - Keys and values remain case-sensitive
-- **Error handling**:
-  - Detects unrecognized commands
-  - Reports missing arguments (`SET` or `GET` without enough args)
-  - Prints a usage guide for incorrect inputs
-- **Rust best practices**:
-  - Modular design in progress (`main.rs`, with future `storage.rs` and `index.rs`)
-  - Clear commenting and file headers
-  - Case normalization limited to commands (keys/values preserved)
+## Features
 
-## Roadmap
+### Core Commands
+| Command | Description |
+|--------|-------------|
+| `SET <key> <value>` | Inserts or updates a key–value pair and appends it to the log. |
+| `GET <key>` | Retrieves the value, applying TTL expiration if needed. |
+| `DEL <key>` | Deletes a key and any associated TTL. |
+| `EXISTS <key>` | Returns `1` if the key exists and is not expired, otherwise `0`. |
+| `EXPIRE <key> <ms>` | Assigns a TTL in milliseconds to an existing key. |
+| `TTL <key>` | Returns remaining TTL, `-1` for no TTL, or `-2` for missing/expired keys. |
+| `MSET <k1> <v1> ...` | Writes multiple key–value pairs (each logged individually). |
+| `MGET <k1> <k2> ...` | Retrieves multiple keys with TTL checks. |
+| `RANGE <start> <end>` | Returns lexicographically ordered **single-character alphabetic keys** within the range. |
 
-Part 1 (Complete)
-- REPL loop
-- Persistent logging
-- B-Tree insert/search/delete
+---
 
-Part 2 (Planned)
-- Convert to B+ Tree (values only in leaves, linked leaf layer).
-- Enhanced range queries (SCAN key1 key2).
-- More advanced integration tests.
+### Transactions
+The store supports a single active transaction:
 
-Future Improvements
+- `BEGIN` — Start a new transaction  
+- `SET` / `DEL` — Applied to the transaction overlay  
+- `COMMIT` — Flushes transaction changes to the B-Tree and persistent log  
+- `ABORT` — Discards all staged changes  
 
-Configurable degree t via command-line flag.
-Benchmarking and performance tuning.
-Optional crash recovery simulation.
+Nested transactions are not supported.
+
+---
+
+### Persistence & Recovery
+- All persistent operations use an **append-only log**.
+- On startup:
+  1. The data file is created if missing.  
+  2. All `SET` commands are replayed into the B-Tree index.  
+  3. “Last write wins” resolves multiple entries for the same key.  
+
+TTL metadata is not persisted, per assignment rules.
+
+---
+
+### TTL Behavior
+TTL management includes:
+
+- Millisecond-precision expiration  
+- Lazy cleanup on `GET`, `MGET`, `TTL`, and `RANGE`  
+- Expired keys are removed from both TTL structures and the index  
+- Behavior matches Gradebot expectations:  
+  - Missing key → `-2`  
+  - Expired key → `-2`  
+  - Key with no TTL → `-1`  
+
+---
+
+### Range Queries
+`RANGE <start> <end>` behavior:
+
+- Only **alphabetic single-character** keys (`a`–`z`) are included  
+- Multi-character keys (e.g., UUIDs) are ignored  
+- TTL checks are applied before inclusion  
+- Empty `""` for start or end expands the range  
 
 ## Requirements
 - Rust (edition 2021 or later).  
