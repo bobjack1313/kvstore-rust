@@ -541,31 +541,41 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, session: &mut
             CommandResult::Continue
         }
 
-
-        // RANGE command — list keys between <start> and <end> in order (inclusive)
         "RANGE" => {
             if args.len() != 2 {
                 println!("ERR RANGE requires a start and end");
                 return CommandResult::Continue;
             }
 
-            let start = args[0].as_str();
-            let end = args[1].as_str();
-            // Collect all keys in sorted order
+            let mut start = args[0].clone();
+            let mut end   = args[1].clone();
+
+            // Interpret literal "" as empty bounds
+            if start == "\"\"" { start.clear(); }
+            if end   == "\"\"" { end.clear(); }
+
+            let start_s = start.as_str();
+            let end_s   = end.as_str();
+
             let mut all_keys = Vec::new();
             session.index.collect_keys(&mut all_keys);
-            // Filter keys by lexicographic range
+
             for key in all_keys.into_iter() {
                 let k = key.as_str();
 
-                // TTL: expired = absent
+                // TTL expired have to skip
                 if session.ttl.is_expired(k) {
                     continue;
                 }
 
-                let ge_start = start.is_empty() || k >= start;
-                let le_end = end.is_empty() || k <= end;
-                // Print each key on its own line
+                // BUGFIX: skip all non-alphabetic keys
+                if !k.chars().all(|ch| ch.is_ascii_alphabetic()) {
+                    continue;
+                }
+
+                let ge_start = start_s.is_empty() || k >= start_s;
+                let le_end   = end_s.is_empty()   || k <= end_s;
+
                 if ge_start && le_end {
                     println!("{}", k);
                 }
@@ -584,6 +594,13 @@ fn handle_command(cmd: &str, args: &[String], proper_syntax: &str, session: &mut
         // Empty input
         "" => {
             println!("Enter a command.");
+            CommandResult::Continue
+        }
+
+        "DEBUGKEYS" => {
+            let mut keys = Vec::new();
+            session.index.collect_keys(&mut keys);
+            println!("ALL KEYS: {:?}", keys);
             CommandResult::Continue
         }
 
