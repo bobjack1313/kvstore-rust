@@ -63,10 +63,49 @@ impl Session {
         self.transaction = Some(Transaction::new());
     }
 
-    /// Commits an active transaction into the main index and clears it.
+
+    /// Commits the active transaction, applying all pending key–value updates
+    /// to the main index and writing them to the persistent log.
+    ///
+    /// This method finalizes an in-progress transaction by:
+    /// - Iterating over each buffered key–value pair in the transaction’s
+    ///   `pending` map.
+    /// - Inserting those values into the live `index`.
+    /// - Appending each update to the write-ahead log as a `SET` operation.
+    ///
+    /// Once all changes are applied, the transaction is cleared and removed
+    /// from the session.
+    ///
+    /// # Behavior
+    ///
+    /// If no transaction is active, this method does nothing.
+    /// If a transaction exists, all staged updates become durable and visible
+    /// to subsequent operations.
+    ///
+    /// # Example
+    /// ```
+    /// use kvstore::{Session, BTreeIndex};
+    ///
+    /// let mut session = Session::new();
+    /// session.begin_transaction();
+    ///
+    /// session.set("x".into(), "10".into());
+    /// session.set("y".into(), "20".into());
+    ///
+    /// // Persist all staged writes
+    /// session.commit_transaction();
+    ///
+    /// assert_eq!(session.index.get("x"), Some("10".to_string()));
+    /// assert_eq!(session.index.get("y"), Some("20".to_string()));
+    /// ```
     pub fn commit_transaction(&mut self) {
         if let Some(tx) = &mut self.transaction {
-            tx.commit(&mut self.index);
+            // Apply to index AND log as SETs
+            for (k, v) in tx.pending.iter() {
+                self.index.insert(k.clone(), v.clone());
+                let _ = crate::storage::append_write(k, v);
+            }
+            tx.clear();
         }
         self.transaction = None;
     }

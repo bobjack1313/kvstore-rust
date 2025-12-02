@@ -64,6 +64,8 @@ impl TTLManager {
     /// assert!(!ttl.set_expiration("cat", 0));   // Invalid TTL
     /// ```
     pub fn set_expiration(&mut self, key: &str, time_ms: i64) -> bool {
+        // println!("[TTL-DEBUG] set_expiration key='{}' expires_in={}ms", key, time_ms);
+
         // Reject negative durations and remove existing expirations
         if time_ms <= 0 {
             self.expirations.remove(key);
@@ -157,6 +159,8 @@ impl TTLManager {
     /// ```
     pub fn clear_expiration(&mut self, key: &str) -> bool {
         // Remove the key’s expiration entry from the map
+        // println!("[TTL-DEBUG] clear_expiration key='{}'", key);
+
         self.expirations.remove(key).is_some()
     }
 
@@ -187,21 +191,32 @@ impl TTLManager {
     /// use std::time::Duration;
     ///
     /// let mut ttl = TTLManager::new();
-    /// ttl.set_expiration("session", 50);
-    /// sleep(Duration::from_millis(60));
-    /// assert!(ttl.is_expired("session"));
+    /// ttl.set_expiration("temp", 100);
+    /// assert!(ttl.ttl_remaining("temp") > 0);
+    ///
+    /// sleep(Duration::from_millis(120));
+    ///
+    /// // TTL should now be expired
+    /// assert_eq!(ttl.ttl_remaining("temp"), -2);
+    /// assert!(ttl.is_expired("temp"));
     /// ```
     pub fn is_expired(&mut self, key: &str) -> bool {
-        // Check whether the key has an associated expiration timestamp.
-        if let Some(&expiration_time) = self.expirations.get(key) {
-            // If the current time exceeds the expiration timestamp, remove it
-            if Instant::now() >= expiration_time {
+        // println!("[TTL-DEBUG] is_expired key='{}'", key);
+
+        if let Some(&exp_at) = self.expirations.get(key) {
+            let now = Instant::now();
+
+            if now >= exp_at {
+                // println!("[TTL-DEBUG] is_expired: EXPIRED key='{}' -> removing", key);
                 self.expirations.remove(key);
                 return true;
             }
+
+            // println!("[TTL-DEBUG] is_expired: ACTIVE key='{}'", key);
+            return false;
         }
 
-        // Key is either untracked or still within its valid TTL window
+        // println!("[TTL-DEBUG] is_expired NO ENTRY key='{}'", key);
         false
     }
 
@@ -234,29 +249,40 @@ impl TTLManager {
     ///
     /// let mut ttl = TTLManager::new();
     /// ttl.set_expiration("temp", 100);
-    /// assert!(ttl.ttl_remaining("temp") > 0); // Has TTL
+    /// assert!(ttl.ttl_remaining("temp") > 0);
     ///
-    /// sleep(Duration::from_millis(120));
-    /// assert_eq!(ttl.ttl_remaining("temp"), -2); // Expired
+    /// std::thread::sleep(std::time::Duration::from_millis(120));
+    /// assert_eq!(ttl.ttl_remaining("temp"), -2);
+    /// assert!(ttl.is_expired("temp"));
     /// ```
     pub fn ttl_remaining(&mut self, key: &str) -> i64 {
-        // Attempt to retrieve the stored expiration timestamp for the key.
-        if let Some(&expiration_time) = self.expirations.get(key) {
+        //println!("[TTL-DEBUG] ttl_remaining key='{}'", key);
+
+        // Is there a TTL entry?
+        if let Some(&exp_at) = self.expirations.get(key) {
+            //println!("[TTL-DEBUG] ttl entry exists key='{}'", key);
+
             let now = Instant::now();
 
-            // If the expiration time has passed, clean up and return -2.
-            if now >= expiration_time {
+            // Expired?
+            if now >= exp_at {
+                //println!("[TTL-DEBUG] ttl_remaining EXPIRED key='{}' -> removing", key);
                 self.expirations.remove(key);
                 return -2;
             }
 
-            // Compute the remaining duration in milliseconds.
-            let remaining = expiration_time.duration_since(now).as_millis();
-            remaining as i64
-        } else {
-            // Key has no TTL entry in the map.
-            -1
+            let remaining = exp_at.duration_since(now).as_millis() as i64;
+            // println!(
+            //     "[TTL-DEBUG] ttl_remaining key='{}' remaining={}ms",
+            //     key, remaining
+            // );
+
+            return remaining;
         }
+
+        // No TTL recorded
+        //println!("[TTL-DEBUG] ttl_remaining NO TTL key='{}'", key);
+        -1
     }
 
 

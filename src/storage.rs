@@ -92,28 +92,29 @@ pub fn append_write(filename: &str, input_data: &str) -> io::Result<()> {
 /// assert_eq!(records, vec!["SET dog bark", "SET cat meow"]);
 /// ```
 pub fn replay_log(filename: &str) -> io::Result<Vec<String>> {
-    let mut data_records = Vec::new();
+    let file = File::open(filename);
 
-    // Using match to compare OK with Err to add better handling
-    match File::open(filename) {
-
-        // Valid opening, pushing records
-        Ok(file) => {
-            let buf_reader = BufReader::new(file);
-
-            for line in buf_reader.lines() {
-                let data_entry = line?;
-                let trimmed = data_entry.trim();
-                if !trimmed.is_empty() {
-                    data_records.push(trimmed.to_string());
-                }
-            }
-            Ok(data_records)
+    // Error for missing file
+    if let Err(e) = &file {
+        if e.kind() == io::ErrorKind::NotFound {
+            return Ok(vec![]);
         }
-        // Missing file = empty Vec - The end commas will not return
-        Err(ref e) if e.kind() == io::ErrorKind::NotFound => Ok(vec![]),
-        Err(e) => Err(e),
+        return Err(std::io::Error::new(e.kind(), e.to_string()));
     }
+
+    let reader = BufReader::new(file.unwrap());
+    let mut out = Vec::new();
+
+    // Valid opening, pushing records
+    for line in reader.lines() {
+        let Ok(l) = line else { continue };
+        let trimmed = l.trim();
+        if !trimmed.is_empty() {
+            out.push(trimmed.to_string());
+        }
+    }
+
+    Ok(out)
 }
 
 

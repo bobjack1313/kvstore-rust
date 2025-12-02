@@ -93,4 +93,60 @@ impl BTreeNode {
             .binary_search_by(|(k, _)| k.as_str().cmp(key))
             .unwrap_or_else(|pos| pos)
     }
+
+
+    /// Collects all keys stored in this subtree and appends them to the
+    /// provided output vector in sorted (in-order) order.
+    ///
+    /// This method performs an in-order traversal of the B-tree:
+    /// - If the node is a leaf, it simply pushes all keys in their
+    ///   stored order.
+    /// - If the node is internal, it recursively visits each child,
+    ///   inserting the key that separates the children between those visits.
+    ///
+    /// # Arguments
+    ///
+    /// * `out` - A mutable vector that will be appended with the keys
+    ///   discovered during traversal.
+    ///
+    /// # Behavior
+    ///
+    /// Keys are cloned and appended to `out`. The traversal guarantees that
+    /// the resulting vector is globally sorted across the entire subtree.
+    ///
+    /// # Example
+    /// ```
+    /// use kvstore::BTreeNode;
+    ///
+    /// // Build a simple leaf node
+    /// let mut node = BTreeNode::new(true);
+    /// node.kv_pairs.push(("a".to_string(), "1".to_string()));
+    /// node.kv_pairs.push(("b".to_string(), "2".to_string()));
+    ///
+    /// let mut out = Vec::new();
+    /// node.collect_keys(&mut out);
+    ///
+    /// assert_eq!(out, vec!["a".to_string(), "b".to_string()]);
+    /// ```
+    pub fn collect_keys(&self, out: &mut Vec<String>) {
+        if self.is_leaf {
+            // Push ONLY keys
+            for (k, _) in &self.kv_pairs {
+                out.push(k.clone());
+            }
+        } else {
+            // Internal node: in-order traversal
+            for i in 0..self.kv_pairs.len() {
+                // Left subtree
+                self.children[i].collect_keys(out);
+
+                // Key at index i
+                out.push(self.kv_pairs[i].0.clone());
+            }
+
+            // Last child (rightmost subtree)
+            self.children[self.kv_pairs.len()].collect_keys(out);
+        }
+    }
+
 }

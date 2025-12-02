@@ -249,22 +249,8 @@ impl BTreeIndex {
     /// tree.collect_keys(&mut keys);
     /// assert!(keys.windows(2).all(|w| w[0] <= w[1]));
     /// ```
-    pub fn collect_keys(&self, keys: &mut Vec<String>) {
-        // Recursive helper to traverse the B-tree in lexicographic order.
-        fn traverse(node: &BTreeNode, keys: &mut Vec<String>) {
-            for i in 0..node.kv_pairs.len() {
-                if !node.is_leaf {
-                    traverse(&node.children[i], keys);
-                }
-                keys.push(node.kv_pairs[i].0.clone());
-            }
-            if !node.is_leaf {
-                traverse(&node.children[node.kv_pairs.len()], keys);
-            }
-        }
-
-        // Begin traversal from the root node.
-        traverse(&self.root, keys);
+    pub fn collect_keys(&self, out: &mut Vec<String>) {
+        self.root.collect_keys(out);
     }
 
 
@@ -722,5 +708,10 @@ impl BTreeIndex {
             current_node = &mut current_node.children[last];
         }
         current_node.kv_pairs.last().expect("non-empty").clone()
+    }
+
+    /// Added helper to clear tree for repeated sessions.
+    pub fn clear(&mut self) {
+        self.root = Box::new(BTreeNode::new(true));
     }
 }

@@ -16,6 +16,7 @@
 //
 // =====================================================================
 use crate::{BTreeIndex, TTLManager};
+use crate::storage;
 
 /// Represents a single active transaction session.
 /// Holds all pending writes and their temporary TTL metadata.
@@ -50,17 +51,27 @@ impl Transaction {
         self.pending.push((key, value));
     }
 
+
     /// Commits all pending writes into the main BTree index.
     ///
-    /// Writes are applied in insertion order, and any active TTLs
-    /// managed within this transaction are merged into the global
-    /// TTL manager as part of the commit.
+    /// Writes are applied in insertion order, and also appended to
+    /// the persistent log as plain SET commands so they survive
+    /// process restarts.
     pub fn commit(&mut self, index: &mut BTreeIndex) {
         for (k, v) in &self.pending {
+            // Apply to in-memory index
             index.insert(k.clone(), v.clone());
+
+            // Also append to disk log as a SET command
+            let line = format!("SET {} {}", k, v);
+            let _ = storage::append_write(storage::DATA_FILE, &line);
         }
+
+        // Clear transaction buffers
         self.pending.clear();
+        self.ttl_manager.clear();
     }
+
 
     /// Clears all pending writes (used for ABORT logic).
     ///
@@ -80,4 +91,5 @@ impl Transaction {
     pub fn is_empty(&self) -> bool {
         self.pending.is_empty()
     }
+
 }
